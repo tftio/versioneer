@@ -4,7 +4,11 @@
       "Read(//Users/jfb/Projects/**)",
       "Read(//Users/jfb/Work/projects/peter-hook/.github/**)",
       "Bash(cargo:*)",
-      "Bash(./target/debug/versioneer:*)"
+      "Bash(./target/debug/versioneer:*)",
+      "mcp__fetch__fetch",
+      "Bash(gh repo view:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)"
     ],
     "deny": [],
     "ask": []
