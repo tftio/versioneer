@@ -1,0 +1,32 @@
+[package]
+name = "versioneer"
+version = "0.2.0"
+edition = "2021"
+authors = ["Versioneer Contributors"]
+description = "A tool to synchronize VERSION files with build system version declarations"
+license = "CC0-1.0"
+repository = "https://github.com/example/versioneer"
+keywords = ["version", "semver", "build", "sync", "cli"]
+categories = ["development-tools", "command-line-utilities"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+clap = { version = "4.5", features = ["derive"] }
+anyhow = "1.0"
+regex = "1.0"
+semver = "1.0"
+
+[dev-dependencies]
+tempfile = "3.13"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+multiple-crate-versions = "allow"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"

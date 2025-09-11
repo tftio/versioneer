@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/jfb/Projects/**)",
+      "Read(//Users/jfb/Work/projects/peter-hook/.github/**)",
+      "Bash(cargo:*)",
+      "Bash(./target/debug/versioneer:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
