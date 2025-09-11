@@ -33,18 +33,18 @@ If you have the GitHub CLI (`gh`) installed, you can install versioneer directly
 # Create the local bin directory if it doesn't exist
 mkdir -p ~/.local/bin
 
-# Download and extract the binary for your platform
+# Download and extract the binary for your platform (latest version)
 # macOS Apple Silicon (ARM64)
-gh release download v1.0.0 --repo workhelix/versioneer --pattern "versioneer-aarch64-apple-darwin.tar.gz" -O - | tar -xz -C ~/.local/bin
+gh release download --repo workhelix/versioneer --pattern "versioneer-aarch64-apple-darwin.tar.gz" -O - | tar -xz -C ~/.local/bin
 
 # macOS Intel (x64)
-gh release download v1.0.0 --repo workhelix/versioneer --pattern "versioneer-x86_64-apple-darwin.tar.gz" -O - | tar -xz -C ~/.local/bin
+gh release download --repo workhelix/versioneer --pattern "versioneer-x86_64-apple-darwin.tar.gz" -O - | tar -xz -C ~/.local/bin
 
 # Linux x64
-gh release download v1.0.0 --repo workhelix/versioneer --pattern "versioneer-x86_64-unknown-linux-gnu.tar.gz" -O - | tar -xz -C ~/.local/bin
+gh release download --repo workhelix/versioneer --pattern "versioneer-x86_64-unknown-linux-gnu.tar.gz" -O - | tar -xz -C ~/.local/bin
 
 # Linux ARM64
-gh release download v1.0.0 --repo workhelix/versioneer --pattern "versioneer-aarch64-unknown-linux-gnu.tar.gz" -O - | tar -xz -C ~/.local/bin
+gh release download --repo workhelix/versioneer --pattern "versioneer-aarch64-unknown-linux-gnu.tar.gz" -O - | tar -xz -C ~/.local/bin
 ```
 
 Make sure `~/.local/bin` is in your `PATH`:
