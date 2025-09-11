@@ -23,7 +23,37 @@ cp target/release/versioneer /usr/local/bin/
 
 ### From Releases
 
-Download the appropriate binary for your platform from the [releases page](https://github.com/example/versioneer/releases).
+Download the appropriate binary for your platform from the [releases page](https://github.com/workhelix/versioneer/releases).
+
+### Using GitHub CLI
+
+If you have the GitHub CLI (`gh`) installed, you can install versioneer directly to `~/.local/bin`:
+
+```bash
+# Create the local bin directory if it doesn't exist
+mkdir -p ~/.local/bin
+
+# Download and extract the binary for your platform
+# macOS Apple Silicon (ARM64)
+gh release download v1.0.0 --repo workhelix/versioneer --pattern "versioneer-aarch64-apple-darwin.tar.gz" -O - | tar -xz -C ~/.local/bin
+
+# macOS Intel (x64)
+gh release download v1.0.0 --repo workhelix/versioneer --pattern "versioneer-x86_64-apple-darwin.tar.gz" -O - | tar -xz -C ~/.local/bin
+
+# Linux x64
+gh release download v1.0.0 --repo workhelix/versioneer --pattern "versioneer-x86_64-unknown-linux-gnu.tar.gz" -O - | tar -xz -C ~/.local/bin
+
+# Linux ARM64
+gh release download v1.0.0 --repo workhelix/versioneer --pattern "versioneer-aarch64-unknown-linux-gnu.tar.gz" -O - | tar -xz -C ~/.local/bin
+```
+
+Make sure `~/.local/bin` is in your `PATH`:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Add this to your shell configuration file (`.bashrc`, `.zshrc`, etc.) to make it permanent.
 
 ## Usage
 
