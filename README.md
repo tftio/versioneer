@@ -8,6 +8,7 @@ A tool to synchronize VERSION files with build system version declarations, supp
 - Automatic synchronization between VERSION file and build system files
 - Supports Cargo.toml and pyproject.toml
 - Version mismatch detection with helpful error messages
+- Git tagging with customizable tag formats
 - Cross-platform compatibility
 
 ## Installation
@@ -71,6 +72,13 @@ versioneer minor   # 1.2.3 -> 1.3.0
 versioneer major   # 1.2.3 -> 2.0.0
 ```
 
+Bump version with git tagging:
+```bash
+versioneer patch --tag                    # Bump and create tag: {repository_name}-v1.2.4
+versioneer minor --tag --tag-format "v{version}"   # Bump and create tag: v1.3.0
+versioneer major --tag --tag-format "release-{major}.{minor}.{patch}"  # Custom format
+```
+
 Show current version:
 ```bash
 versioneer show
@@ -91,6 +99,13 @@ Verify all version files are synchronized:
 versioneer verify
 ```
 
+Create git tag for current version:
+```bash
+versioneer tag                             # Create tag: {repository_name}-v{current_version}
+versioneer tag --tag-format "v{version}"   # Create tag: v{current_version}
+versioneer tag --tag-format "{major}.{minor}.{patch}-release"  # Create tag: 1.2.3-release
+```
+
 ### Workflow
 
 1. **Initialize your project** with a VERSION file containing your starting version (e.g., `1.0.0`)
@@ -108,6 +123,53 @@ Before performing version bumps, versioneer verifies that all version files are 
 3. Exit with an error code to prevent accidental version bumps
 
 This ensures that your version files never get out of sync accidentally.
+
+## Git Tagging
+
+Versioneer can automatically create git tags when bumping versions, making it easy to track releases in your repository.
+
+### Tag Format Placeholders
+
+You can customize the tag format using these placeholders:
+
+- `{repository_name}` - Name of the repository (from git remote or directory name)
+- `{version}` - Full semantic version (e.g., "1.2.3")
+- `{major}` - Major version number
+- `{minor}` - Minor version number
+- `{patch}` - Patch version number
+
+### Default Tag Format
+
+If no custom format is specified, tags use the format: `{repository_name}-v{version}`
+
+Examples:
+- `versioneer-v1.2.3`
+- `my-project-v2.0.0`
+
+### Custom Tag Formats
+
+```bash
+# Simple version tag
+versioneer patch --tag --tag-format "v{version}"
+# Result: v1.2.4
+
+# Release format with individual components
+versioneer minor --tag --tag-format "release-{major}.{minor}.{patch}"
+# Result: release-1.3.0
+
+# Project-specific format
+versioneer major --tag --tag-format "{repository_name}-release-{major}.{minor}"
+# Result: my-project-release-2.0
+```
+
+### Standalone Tagging
+
+Create a tag for the current version without bumping:
+
+```bash
+versioneer tag                           # Use default format
+versioneer tag --tag-format "v{version}" # Use custom format
+```
 
 ## Supported File Formats
 

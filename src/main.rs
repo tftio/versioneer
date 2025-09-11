@@ -17,11 +17,32 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Bump the major version (x.y.z -> (x+1).0.0)
-    Major,
+    Major {
+        /// Create a git tag after bumping version
+        #[arg(short, long)]
+        tag: bool,
+        /// Custom tag format (default: {repository_name}-v{version})
+        #[arg(long)]
+        tag_format: Option<String>,
+    },
     /// Bump the minor version (x.y.z -> x.(y+1).0)
-    Minor,
+    Minor {
+        /// Create a git tag after bumping version
+        #[arg(short, long)]
+        tag: bool,
+        /// Custom tag format (default: {repository_name}-v{version})
+        #[arg(long)]
+        tag_format: Option<String>,
+    },
     /// Bump the patch version (x.y.z -> x.y.(z+1))
-    Patch,
+    Patch {
+        /// Create a git tag after bumping version
+        #[arg(short, long)]
+        tag: bool,
+        /// Custom tag format (default: {repository_name}-v{version})
+        #[arg(long)]
+        tag_format: Option<String>,
+    },
     /// Show the current version
     Show,
     /// Synchronize all version files to match the VERSION file
@@ -30,8 +51,15 @@ enum Commands {
     Status,
     /// Verify that all version files are synchronized
     Verify,
+    /// Create a git tag for the current version
+    Tag {
+        /// Custom tag format (default: {repository_name}-v{version})
+        #[arg(long)]
+        tag_format: Option<String>,
+    },
 }
 
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -69,26 +97,38 @@ fn main() -> Result<()> {
             }
         }
         Some(command) => match command {
-            Commands::Major => {
+            Commands::Major { tag, tag_format } => {
                 manager
                     .bump_version(BumpType::Major)
                     .context("Failed to bump major version")?;
                 let new_version = manager.read_version_file()?;
                 println!("Bumped to version {new_version}");
+                
+                if tag {
+                    handle_git_tagging(&manager, tag_format.as_deref());
+                }
             }
-            Commands::Minor => {
+            Commands::Minor { tag, tag_format } => {
                 manager
                     .bump_version(BumpType::Minor)
                     .context("Failed to bump minor version")?;
                 let new_version = manager.read_version_file()?;
                 println!("Bumped to version {new_version}");
+                
+                if tag {
+                    handle_git_tagging(&manager, tag_format.as_deref());
+                }
             }
-            Commands::Patch => {
+            Commands::Patch { tag, tag_format } => {
                 manager
                     .bump_version(BumpType::Patch)
                     .context("Failed to bump patch version")?;
                 let new_version = manager.read_version_file()?;
                 println!("Bumped to version {new_version}");
+                
+                if tag {
+                    handle_git_tagging(&manager, tag_format.as_deref());
+                }
             }
             Commands::Show => {
                 let version = manager
@@ -136,8 +176,28 @@ fn main() -> Result<()> {
                     std::process::exit(1);
                 }
             },
+            Commands::Tag { tag_format } => {
+                handle_git_tagging(&manager, tag_format.as_deref());
+            }
         },
     }
 
     Ok(())
+}
+
+fn handle_git_tagging(manager: &VersionManager, tag_format: Option<&str>) {
+    if !manager.is_git_repository() {
+        eprintln!("Warning: Not in a git repository, skipping tag creation");
+        return;
+    }
+
+    match manager.create_git_tag(tag_format) {
+        Ok(tag_name) => {
+            println!("Created git tag: {tag_name}");
+        }
+        Err(e) => {
+            eprintln!("Failed to create git tag: {e}");
+            std::process::exit(1);
+        }
+    }
 }
