@@ -146,6 +146,29 @@ impl VersionManager {
         Ok(())
     }
 
+    /// Reset the version to a specific version string
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the version string is invalid or if file operations fail.
+    pub fn reset_version(&self, version_str: &str) -> Result<()> {
+        // Parse the provided version string
+        let new_version = Version::parse(version_str)
+            .with_context(|| format!("Invalid semantic version format: '{version_str}'"))?;
+
+        // Update VERSION file
+        self.write_version_file(&new_version)?;
+
+        // Update all detected build system files
+        let build_systems = self.detect_build_systems();
+        for system in &build_systems {
+            self.update_build_system_version(system, &new_version)
+                .with_context(|| format!("Failed to update {system:?} version"))?;
+        }
+
+        Ok(())
+    }
+
     /// Verify that all version files are synchronized
     ///
     /// # Errors
@@ -557,5 +580,94 @@ build-backend = "setuptools.build_meta"
             VersionManager::extract_repo_name_from_url("https://github.com/user/myproject"),
             Some("myproject".to_string())
         );
+    }
+
+    #[test]
+    fn test_reset_version_to_default() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        create_test_files(temp_dir.path(), "1.2.3")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        manager.reset_version("0.0.0")?;
+
+        let version = manager.read_version_file()?;
+        assert_eq!(version, Version::new(0, 0, 0));
+
+        let cargo_version = manager.read_cargo_version()?;
+        assert_eq!(cargo_version, Version::new(0, 0, 0));
+
+        let pyproject_version = manager.read_pyproject_version()?;
+        assert_eq!(pyproject_version, Version::new(0, 0, 0));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_reset_version_to_specific_version() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        create_test_files(temp_dir.path(), "1.2.3")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        manager.reset_version("3.5.7")?;
+
+        let version = manager.read_version_file()?;
+        assert_eq!(version, Version::new(3, 5, 7));
+
+        let cargo_version = manager.read_cargo_version()?;
+        assert_eq!(cargo_version, Version::new(3, 5, 7));
+
+        let pyproject_version = manager.read_pyproject_version()?;
+        assert_eq!(pyproject_version, Version::new(3, 5, 7));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_reset_version_with_prerelease() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        create_test_files(temp_dir.path(), "1.0.0")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        manager.reset_version("2.0.0-alpha.1")?;
+
+        let version = manager.read_version_file()?;
+        assert_eq!(version.major, 2);
+        assert_eq!(version.minor, 0);
+        assert_eq!(version.patch, 0);
+        assert_eq!(version.pre.as_str(), "alpha.1");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_reset_version_invalid_format() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        create_test_files(temp_dir.path(), "1.0.0")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let result = manager.reset_version("invalid-version");
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid semantic version format"));
+
+        // Verify original version is unchanged
+        let version = manager.read_version_file()?;
+        assert_eq!(version, Version::new(1, 0, 0));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_reset_version_empty_string() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        create_test_files(temp_dir.path(), "1.0.0")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let result = manager.reset_version("");
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid semantic version format"));
+
+        Ok(())
     }
 }

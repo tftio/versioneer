@@ -57,6 +57,17 @@ enum Commands {
         #[arg(long)]
         tag_format: Option<String>,
     },
+    /// Reset the version to a specific version or 0.0.0
+    Reset {
+        /// The version to reset to (default: 0.0.0)
+        version: Option<String>,
+        /// Create a git tag after resetting version
+        #[arg(short, long)]
+        tag: bool,
+        /// Custom tag format (default: {repository_name}-v{version})
+        #[arg(long)]
+        tag_format: Option<String>,
+    },
 }
 
 #[allow(clippy::too_many_lines)]
@@ -178,6 +189,23 @@ fn main() -> Result<()> {
             },
             Commands::Tag { tag_format } => {
                 handle_git_tagging(&manager, tag_format.as_deref());
+            }
+            Commands::Reset { version, tag, tag_format } => {
+                let target_version = version.as_deref().unwrap_or("0.0.0");
+                
+                match manager.reset_version(target_version) {
+                    Ok(()) => {
+                        println!("Version reset to {target_version}");
+                        
+                        if tag {
+                            handle_git_tagging(&manager, tag_format.as_deref());
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to reset version: {e}");
+                        std::process::exit(1);
+                    }
+                }
             }
         },
     }
