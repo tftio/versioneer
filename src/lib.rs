@@ -336,13 +336,20 @@ impl VersionManager {
         let commit = head.peel_to_commit().context("Failed to get HEAD commit")?;
 
         // Create an annotated tag
-        let signature = repo.signature()
-            .context("Failed to get git signature. Make sure git user.name and user.email are configured.")?;
+        let signature = repo.signature().context(
+            "Failed to get git signature. Make sure git user.name and user.email are configured.",
+        )?;
 
         let message = format!("Release {tag_name}");
 
-        repo.tag(&tag_name, &commit.into_object(), &signature, &message, false)
-            .with_context(|| format!("Failed to create git tag '{tag_name}'"))?;
+        repo.tag(
+            &tag_name,
+            &commit.into_object(),
+            &signature,
+            &message,
+            false,
+        )
+        .with_context(|| format!("Failed to create git tag '{tag_name}'"))?;
 
         Ok(tag_name)
     }
@@ -372,7 +379,7 @@ impl VersionManager {
     fn extract_repo_name_from_url(url: &str) -> Option<String> {
         // Handle GitHub URLs like git@github.com:user/repo.git or https://github.com/user/repo.git
         let url = url.trim_end_matches(".git");
-        
+
         if let Some(name) = url.split('/').next_back() {
             return Some(name.to_string());
         }
@@ -396,14 +403,14 @@ impl VersionManager {
     #[allow(clippy::literal_string_with_formatting_args)]
     fn format_tag_string(&self, format: &str, version: &Version) -> Result<String> {
         let repo_name = self.get_repository_name()?;
-        
+
         let result = format
             .replace("{repository_name}", &repo_name)
             .replace("{version}", &version.to_string())
             .replace("{major}", &version.major.to_string())
             .replace("{minor}", &version.minor.to_string())
             .replace("{patch}", &version.patch.to_string());
-            
+
         Ok(result)
     }
 
@@ -528,7 +535,7 @@ build-backend = "setuptools.build_meta"
     fn test_git_repository_detection() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let manager = VersionManager::new(temp_dir.path());
-        
+
         // Should return false for non-git directory
         assert!(!manager.is_git_repository());
         Ok(())
@@ -538,7 +545,7 @@ build-backend = "setuptools.build_meta"
     fn test_repository_name_from_path() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let manager = VersionManager::new(temp_dir.path());
-        
+
         let repo_name = manager.get_repository_name()?;
         // Should get directory name as fallback
         assert!(!repo_name.is_empty());
@@ -550,19 +557,19 @@ build-backend = "setuptools.build_meta"
     fn test_tag_format_parsing() -> Result<()> {
         let temp_dir = TempDir::new()?;
         create_test_files(temp_dir.path(), "1.2.3")?;
-        
+
         let manager = VersionManager::new(temp_dir.path());
         let version = Version::new(1, 2, 3);
-        
+
         let result = manager.format_tag_string("v{version}", &version)?;
         assert_eq!(result, "v1.2.3");
-        
+
         let result = manager.format_tag_string("release-{major}.{minor}.{patch}", &version)?;
         assert_eq!(result, "release-1.2.3");
-        
+
         let result = manager.format_tag_string("{repository_name}-v{major}.{minor}", &version)?;
         assert!(result.contains("-v1.2"));
-        
+
         Ok(())
     }
 
@@ -572,12 +579,12 @@ build-backend = "setuptools.build_meta"
             VersionManager::extract_repo_name_from_url("git@github.com:user/repo.git"),
             Some("repo".to_string())
         );
-        
+
         assert_eq!(
             VersionManager::extract_repo_name_from_url("https://github.com/user/myproject.git"),
             Some("myproject".to_string())
         );
-        
+
         assert_eq!(
             VersionManager::extract_repo_name_from_url("https://github.com/user/myproject"),
             Some("myproject".to_string())
@@ -650,7 +657,10 @@ build-backend = "setuptools.build_meta"
         let result = manager.reset_version("invalid-version");
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid semantic version format"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid semantic version format"));
 
         // Verify original version is unchanged
         let version = manager.read_version_file()?;
@@ -668,7 +678,10 @@ build-backend = "setuptools.build_meta"
         let result = manager.reset_version("");
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid semantic version format"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid semantic version format"));
 
         Ok(())
     }

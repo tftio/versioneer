@@ -100,10 +100,14 @@ fn main() -> Result<()> {
                     match manager.read_build_system_version(system) {
                         Ok(sys_version) => {
                             let status = formatter.sync_status(sys_version == version);
-                            println!("  {:?}: {} {}", system, sys_version, status);
+                            println!("  {system:?}: {sys_version} {status}");
                         }
                         Err(e) => {
-                            eprintln!("{}", formatter.error(&format!("  {:?}: Error reading version: {}", system, e)));
+                            eprintln!(
+                                "{}",
+                                formatter
+                                    .error(&format!("  {system:?}: Error reading version: {e}"))
+                            );
                         }
                     }
                 }
@@ -118,8 +122,11 @@ fn main() -> Result<()> {
                     .bump_version(BumpType::Major)
                     .context("Failed to bump major version")?;
                 let new_version = manager.read_version_file()?;
-                println!("{}", formatter.success(&format!("Bumped to version {}", new_version)));
-                
+                println!(
+                    "{}",
+                    formatter.success(&format!("Bumped to version {new_version}"))
+                );
+
                 if tag {
                     handle_git_tagging(&manager, &formatter, tag_format.as_deref());
                 }
@@ -129,8 +136,11 @@ fn main() -> Result<()> {
                     .bump_version(BumpType::Minor)
                     .context("Failed to bump minor version")?;
                 let new_version = manager.read_version_file()?;
-                println!("{}", formatter.success(&format!("Bumped to version {}", new_version)));
-                
+                println!(
+                    "{}",
+                    formatter.success(&format!("Bumped to version {new_version}"))
+                );
+
                 if tag {
                     handle_git_tagging(&manager, &formatter, tag_format.as_deref());
                 }
@@ -140,8 +150,11 @@ fn main() -> Result<()> {
                     .bump_version(BumpType::Patch)
                     .context("Failed to bump patch version")?;
                 let new_version = manager.read_version_file()?;
-                println!("{}", formatter.success(&format!("Bumped to version {}", new_version)));
-                
+                println!(
+                    "{}",
+                    formatter.success(&format!("Bumped to version {new_version}"))
+                );
+
                 if tag {
                     handle_git_tagging(&manager, &formatter, tag_format.as_deref());
                 }
@@ -157,7 +170,10 @@ fn main() -> Result<()> {
                     .sync_versions()
                     .context("Failed to synchronize versions")?;
                 let version = manager.read_version_file()?;
-                println!("{}", formatter.success(&format!("Synchronized all files to version {}", version)));
+                println!(
+                    "{}",
+                    formatter.success(&format!("Synchronized all files to version {version}"))
+                );
             }
             Commands::Status => {
                 let version = manager
@@ -174,10 +190,15 @@ fn main() -> Result<()> {
                         match manager.read_build_system_version(system) {
                             Ok(sys_version) => {
                                 let status = formatter.sync_status(sys_version == version);
-                                println!("  {:?}: {} {}", system, sys_version, status);
+                                println!("  {system:?}: {sys_version} {status}");
                             }
                             Err(e) => {
-                                eprintln!("{}", formatter.error(&format!("  {:?}: Error reading version: {}", system, e)));
+                                eprintln!(
+                                    "{}",
+                                    formatter.error(&format!(
+                                        "  {system:?}: Error reading version: {e}"
+                                    ))
+                                );
                             }
                         }
                     }
@@ -185,7 +206,10 @@ fn main() -> Result<()> {
             }
             Commands::Verify => match manager.verify_versions_in_sync() {
                 Ok(()) => {
-                    println!("{}", formatter.success("All version files are synchronized"));
+                    println!(
+                        "{}",
+                        formatter.success("All version files are synchronized")
+                    );
                 }
                 Err(e) => {
                     eprintln!("{}", formatter.error(&e.to_string()));
@@ -195,19 +219,29 @@ fn main() -> Result<()> {
             Commands::Tag { tag_format } => {
                 handle_git_tagging(&manager, &formatter, tag_format.as_deref());
             }
-            Commands::Reset { version, tag, tag_format } => {
+            Commands::Reset {
+                version,
+                tag,
+                tag_format,
+            } => {
                 let target_version = version.as_deref().unwrap_or("0.0.0");
-                
+
                 match manager.reset_version(target_version) {
                     Ok(()) => {
-                        println!("{}", formatter.success(&format!("Version reset to {}", target_version)));
+                        println!(
+                            "{}",
+                            formatter.success(&format!("Version reset to {target_version}"))
+                        );
 
                         if tag {
                             handle_git_tagging(&manager, &formatter, tag_format.as_deref());
                         }
                     }
                     Err(e) => {
-                        eprintln!("{}", formatter.error(&format!("Failed to reset version: {}", e)));
+                        eprintln!(
+                            "{}",
+                            formatter.error(&format!("Failed to reset version: {e}"))
+                        );
                         std::process::exit(1);
                     }
                 }
@@ -218,9 +252,16 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn handle_git_tagging(manager: &VersionManager, formatter: &OutputFormatter, tag_format: Option<&str>) {
+fn handle_git_tagging(
+    manager: &VersionManager,
+    formatter: &OutputFormatter,
+    tag_format: Option<&str>,
+) {
     if !manager.is_git_repository() {
-        println!("{}", formatter.warning("Not in a git repository, skipping tag creation"));
+        println!(
+            "{}",
+            formatter.warning("Not in a git repository, skipping tag creation")
+        );
         return;
     }
 
@@ -229,7 +270,10 @@ fn handle_git_tagging(manager: &VersionManager, formatter: &OutputFormatter, tag
             println!("{}", formatter.git_tag(&tag_name));
         }
         Err(e) => {
-            eprintln!("{}", formatter.error(&format!("Failed to create git tag: {}", e)));
+            eprintln!(
+                "{}",
+                formatter.error(&format!("Failed to create git tag: {e}"))
+            );
             std::process::exit(1);
         }
     }

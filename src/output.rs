@@ -1,7 +1,7 @@
 //! Output formatting utilities for versioneer
 
-use atty::Stream;
 use console::{style, Emoji};
+use std::io::IsTerminal;
 
 /// Output formatter that strips colors and emojis for non-TTY output
 pub struct OutputFormatter {
@@ -14,7 +14,7 @@ impl OutputFormatter {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            is_tty: atty::is(Stream::Stdout),
+            is_tty: std::io::stdout().is_terminal(),
         }
     }
 
@@ -22,10 +22,7 @@ impl OutputFormatter {
     #[must_use]
     pub fn success(&self, msg: &str) -> String {
         if self.is_tty {
-            format!("{} {}",
-                Emoji("✨", "✓"),
-                style(msg).green()
-            )
+            format!("{} {}", Emoji("✨", "✓"), style(msg).green())
         } else {
             format!("✓ {msg}")
         }
@@ -35,10 +32,7 @@ impl OutputFormatter {
     #[must_use]
     pub fn error(&self, msg: &str) -> String {
         if self.is_tty {
-            format!("{} {}",
-                Emoji("❌", "✗"),
-                style(msg).red()
-            )
+            format!("{} {}", Emoji("❌", "✗"), style(msg).red())
         } else {
             format!("✗ {msg}")
         }
@@ -48,10 +42,7 @@ impl OutputFormatter {
     #[must_use]
     pub fn warning(&self, msg: &str) -> String {
         if self.is_tty {
-            format!("{} {}",
-                Emoji("⚠️", "!"),
-                style(msg).yellow()
-            )
+            format!("{} {}", Emoji("⚠️", "!"), style(msg).yellow())
         } else {
             format!("! {msg}")
         }
@@ -61,7 +52,8 @@ impl OutputFormatter {
     #[must_use]
     pub fn version(&self, version: &str) -> String {
         if self.is_tty {
-            format!("{} Current version: {}",
+            format!(
+                "{} Current version: {}",
                 Emoji("📦", ""),
                 style(version).cyan().bold()
             )
@@ -100,7 +92,8 @@ impl OutputFormatter {
     #[must_use]
     pub fn git_tag(&self, tag_name: &str) -> String {
         if self.is_tty {
-            format!("{} Created git tag: {}",
+            format!(
+                "{} Created git tag: {}",
                 Emoji("🏷️", ""),
                 style(tag_name).magenta().bold()
             )
