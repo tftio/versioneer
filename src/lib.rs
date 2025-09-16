@@ -3,6 +3,8 @@
 //! This library provides functionality to read, parse, and update version information
 //! across different file formats including VERSION files, Cargo.toml, and pyproject.toml.
 
+pub mod output;
+
 use anyhow::{Context, Result};
 use semver::Version;
 use std::fs;

@@ -13,9 +13,13 @@
       "Bash(git push:*)",
       "Bash(gh release list:*)",
       "Bash(git add:*)",
-      "Bash(git tag:*)"
+      "Bash(git tag:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "/Users/jfb/Projects/peter-hook/"
+    ]
   }
 }
