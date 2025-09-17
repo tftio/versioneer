@@ -1,6 +1,6 @@
 [package]
 name = "versioneer"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 authors = ["Versioneer Contributors"]
 description = "A tool to synchronize VERSION files with build system version declarations"
