@@ -19,7 +19,8 @@
       "WebSearch",
       "Bash(taplo check:*)",
       "Bash(taplo format:*)",
-      "Bash(RUSTDOCFLAGS=\"-D warnings -D rustdoc::broken_intra_doc_links\" cargo doc --no-deps --document-private-items --all-features)"
+      "Bash(RUSTDOCFLAGS=\"-D warnings -D rustdoc::broken_intra_doc_links\" cargo doc --no-deps --document-private-items --all-features)",
+      "Bash(./target/release/versioneer:*)"
     ],
     "deny": [],
     "ask": [],

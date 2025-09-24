@@ -1,7 +1,8 @@
 [package]
 name = "versioneer"
-version = "1.0.5"
-edition = "2021"
+version = "1.0.6"
+edition = "2024"
+rust-version = "1.85.0"
 authors = ["Versioneer Contributors"]
 description = "A tool to synchronize VERSION files with build system version declarations"
 license = "MIT"
