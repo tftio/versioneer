@@ -13,22 +13,46 @@ A tool to synchronize VERSION files with build system version declarations, supp
 
 ## Installation
 
-### From Source
+### Quick Install (Recommended)
+
+Install the latest release directly from GitHub:
 
 ```bash
-git clone <repository-url>
-cd versioneer
-cargo build --release
-cp target/release/versioneer /usr/local/bin/
+curl -fsSL https://raw.githubusercontent.com/workhelix/versioneer/main/install.sh | sh
 ```
 
-### From Releases
+Or with a custom install directory:
 
-Download the appropriate binary for your platform from the [releases page](https://github.com/workhelix/versioneer/releases).
+```bash
+INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/workhelix/versioneer/main/install.sh | sh
+```
 
-### Using GitHub CLI
+The install script will:
+- Auto-detect your OS and architecture
+- Download the latest release
+- Verify checksums (when available)
+- Install to `$HOME/.local/bin` by default
+- Prompt before replacing existing installations
+- Guide you on adding the directory to your PATH
 
-If you have the GitHub CLI (`gh`) installed, you can install versioneer directly to `~/.local/bin`:
+### Alternative Install Methods
+
+**From Source (requires Rust toolchain):**
+
+```bash
+git clone https://github.com/workhelix/versioneer.git
+cd versioneer
+cargo build --release
+install -m 0755 target/release/versioneer ~/.local/bin/
+```
+
+**From Releases:**
+
+1. Visit [Releases](https://github.com/workhelix/versioneer/releases)
+2. Download the appropriate `versioneer-{target}.zip` for your platform
+3. Extract and copy the binary to a directory in your PATH
+
+**Using GitHub CLI:**
 
 ```bash
 # Create the local bin directory if it doesn't exist
@@ -36,17 +60,27 @@ mkdir -p ~/.local/bin
 
 # Download and extract the binary for your platform (latest version)
 # macOS Apple Silicon (ARM64)
-gh release download --repo workhelix/versioneer --pattern "versioneer-aarch64-apple-darwin.tar.gz" -O - | tar -xz -C ~/.local/bin
+gh release download --repo workhelix/versioneer --pattern "versioneer-aarch64-apple-darwin.zip" -O - | funzip > ~/.local/bin/versioneer
 
 # macOS Intel (x64)
-gh release download --repo workhelix/versioneer --pattern "versioneer-x86_64-apple-darwin.tar.gz" -O - | tar -xz -C ~/.local/bin
+gh release download --repo workhelix/versioneer --pattern "versioneer-x86_64-apple-darwin.zip" -O - | funzip > ~/.local/bin/versioneer
 
 # Linux x64
-gh release download --repo workhelix/versioneer --pattern "versioneer-x86_64-unknown-linux-gnu.tar.gz" -O - | tar -xz -C ~/.local/bin
+gh release download --repo workhelix/versioneer --pattern "versioneer-x86_64-unknown-linux-gnu.zip" -O - | funzip > ~/.local/bin/versioneer
 
 # Linux ARM64
-gh release download --repo workhelix/versioneer --pattern "versioneer-aarch64-unknown-linux-gnu.tar.gz" -O - | tar -xz -C ~/.local/bin
+gh release download --repo workhelix/versioneer --pattern "versioneer-aarch64-unknown-linux-gnu.zip" -O - | funzip > ~/.local/bin/versioneer
+
+chmod +x ~/.local/bin/versioneer
 ```
+
+### Supported Platforms
+
+- **Linux**: x86_64, aarch64
+- **macOS**: x86_64 (Intel), aarch64 (Apple Silicon)
+- **Windows**: x86_64
+
+### PATH Setup
 
 Make sure `~/.local/bin` is in your `PATH`:
 

@@ -1,10 +1,10 @@
 [package]
 name = "versioneer"
-version = "0.4.2"
+version = "1.0.1"
 edition = "2021"
 authors = ["Versioneer Contributors"]
 description = "A tool to synchronize VERSION files with build system version declarations"
-license = "CC0-1.0"
+license = "MIT"
 repository = "https://github.com/example/versioneer"
 keywords = ["version", "semver", "build", "sync", "cli"]
 categories = ["development-tools", "command-line-utilities"]
