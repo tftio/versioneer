@@ -3,7 +3,7 @@
 [advisories]
 # Fail on any security advisory
 vulnerability = "deny"
-unmaintained = "warn"
+unmaintained = "all"
 unsound = "warn"
 notice = "warn"
 
@@ -19,7 +19,7 @@ allow = [
     "Unicode-3.0",
     "Unicode-DFS-2016",
     "CC0-1.0",
-    "MIT OR Apache-2.0",  # Very common dual license
+    # "MIT OR Apache-2.0",  # Very common dual license - handled separately
 ]
 confidence-threshold = 0.8
 
