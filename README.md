@@ -1,12 +1,12 @@
 # Versioneer
 
-A tool to synchronize VERSION files with build system version declarations, supporting both Cargo.toml (Rust) and pyproject.toml (Python) projects.
+A tool to synchronize VERSION files with build system version declarations, supporting Cargo.toml (Rust), pyproject.toml (Python), and package.json (Node.js/TypeScript) projects.
 
 ## Features
 
 - Semantic versioning support with `major`, `minor`, and `patch` bumps
 - Automatic synchronization between VERSION file and build system files
-- Supports Cargo.toml and pyproject.toml
+- Supports Cargo.toml, pyproject.toml, and package.json
 - Version mismatch detection with helpful error messages
 - Git tagging with customizable tag formats
 - Cross-platform compatibility
@@ -143,7 +143,7 @@ versioneer tag --tag-format "{major}.{minor}.{patch}-release"  # Create tag: 1.2
 ### Workflow
 
 1. **Initialize your project** with a VERSION file containing your starting version (e.g., `1.0.0`)
-2. **Ensure you have** either a `Cargo.toml` or `pyproject.toml` file with a version field
+2. **Ensure you have** at least one of: `Cargo.toml`, `pyproject.toml`, or `package.json` with a version field
 3. **Run `versioneer sync`** to synchronize all files to the VERSION file content
 4. **Use version bump commands** (`major`, `minor`, `patch`) to increment versions
 5. **All files are updated automatically** and kept in sync
@@ -281,10 +281,22 @@ version = "1.2.3"
 description = "My project"
 ```
 
+### package.json
+
+Node.js/TypeScript project configuration with version as a top-level field:
+```json
+{
+  "name": "my-project",
+  "version": "1.2.3",
+  "description": "My project",
+  "main": "index.js"
+}
+```
+
 ## Requirements
 
 - A VERSION file in the project root
-- At least one supported build system file (Cargo.toml or pyproject.toml)
+- At least one supported build system file (Cargo.toml, pyproject.toml, or package.json)
 - Valid semantic version format (MAJOR.MINOR.PATCH)
 
 ## Error Handling

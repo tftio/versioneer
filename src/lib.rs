@@ -17,6 +17,8 @@ pub enum BuildSystem {
     Cargo,
     /// pyproject.toml file for Python projects
     PyProject,
+    /// package.json file for Node.js/TypeScript projects
+    PackageJson,
 }
 
 /// Represents a version bump type following semantic versioning
@@ -84,6 +86,10 @@ impl VersionManager {
             systems.push(BuildSystem::PyProject);
         }
 
+        if self.base_path.join("package.json").exists() {
+            systems.push(BuildSystem::PackageJson);
+        }
+
         systems
     }
 
@@ -96,6 +102,7 @@ impl VersionManager {
         match system {
             BuildSystem::Cargo => self.read_cargo_version(),
             BuildSystem::PyProject => self.read_pyproject_version(),
+            BuildSystem::PackageJson => self.read_package_json_version(),
         }
     }
 
@@ -112,6 +119,7 @@ impl VersionManager {
         match system {
             BuildSystem::Cargo => self.update_cargo_version(version),
             BuildSystem::PyProject => self.update_pyproject_version(version),
+            BuildSystem::PackageJson => self.update_package_json_version(version),
         }
     }
 
@@ -294,6 +302,63 @@ impl VersionManager {
             format!(
                 "Failed to write pyproject.toml at {}",
                 pyproject_path.display()
+            )
+        })
+    }
+
+    /// Read version from package.json
+    fn read_package_json_version(&self) -> Result<Version> {
+        let package_json_path = self.base_path.join("package.json");
+        let content = fs::read_to_string(&package_json_path).with_context(|| {
+            format!(
+                "Failed to read package.json at {}",
+                package_json_path.display()
+            )
+        })?;
+
+        let json: serde_json::Value =
+            serde_json::from_str(&content).with_context(|| "Failed to parse package.json")?;
+
+        let version_str = json
+            .get("version")
+            .and_then(|v| v.as_str())
+            .context("No version found in package.json")?;
+
+        Version::parse(version_str)
+            .with_context(|| format!("Invalid version format in package.json: {version_str}"))
+    }
+
+    /// Update version in package.json
+    fn update_package_json_version(&self, version: &Version) -> Result<()> {
+        let package_json_path = self.base_path.join("package.json");
+        let content = fs::read_to_string(&package_json_path).with_context(|| {
+            format!(
+                "Failed to read package.json at {}",
+                package_json_path.display()
+            )
+        })?;
+
+        let mut json: serde_json::Value =
+            serde_json::from_str(&content).with_context(|| "Failed to parse package.json")?;
+
+        // Update the version field
+        if let Some(obj) = json.as_object_mut() {
+            obj.insert("version".to_string(), serde_json::Value::String(version.to_string()));
+        } else {
+            anyhow::bail!("package.json root is not a JSON object");
+        }
+
+        // Serialize with pretty printing (2-space indent, standard for Node.js)
+        let updated_content = serde_json::to_string_pretty(&json)
+            .with_context(|| "Failed to serialize package.json")?;
+
+        // Add trailing newline (Node.js convention)
+        let updated_content = format!("{updated_content}\n");
+
+        fs::write(&package_json_path, updated_content).with_context(|| {
+            format!(
+                "Failed to write package.json at {}",
+                package_json_path.display()
             )
         })
     }
@@ -683,6 +748,209 @@ build-backend = "setuptools.build_meta"
             .to_string()
             .contains("Invalid semantic version format"));
 
+        Ok(())
+    }
+
+    fn create_package_json(dir: &Path, version: &str, with_dependencies: bool) -> Result<()> {
+        let package_json_content = if with_dependencies {
+            format!(
+                r#"{{
+  "name": "test-package",
+  "version": "{version}",
+  "description": "A test package",
+  "main": "index.js",
+  "scripts": {{
+    "test": "jest",
+    "build": "tsc"
+  }},
+  "dependencies": {{
+    "express": "^4.18.0"
+  }},
+  "devDependencies": {{
+    "typescript": "^5.0.0"
+  }}
+}}
+"#
+            )
+        } else {
+            format!(
+                r#"{{
+  "name": "test-package",
+  "version": "{version}"
+}}
+"#
+            )
+        };
+        fs::write(dir.join("package.json"), package_json_content)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_detect_package_json() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("VERSION"), "1.0.0")?;
+        create_package_json(temp_dir.path(), "1.0.0", false)?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let systems = manager.detect_build_systems();
+
+        assert!(systems.contains(&BuildSystem::PackageJson));
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_package_json_version() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        create_package_json(temp_dir.path(), "2.3.4", false)?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let version = manager.read_package_json_version()?;
+
+        assert_eq!(version, Version::new(2, 3, 4));
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_package_json_version_with_dependencies() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        create_package_json(temp_dir.path(), "1.5.0", true)?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let version = manager.read_package_json_version()?;
+
+        assert_eq!(version, Version::new(1, 5, 0));
+        Ok(())
+    }
+
+    #[test]
+    fn test_update_package_json_version() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        create_package_json(temp_dir.path(), "1.0.0", false)?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let new_version = Version::new(2, 0, 0);
+        manager.update_package_json_version(&new_version)?;
+
+        let version = manager.read_package_json_version()?;
+        assert_eq!(version, Version::new(2, 0, 0));
+        Ok(())
+    }
+
+    #[test]
+    fn test_update_package_json_preserves_other_fields() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        create_package_json(temp_dir.path(), "1.0.0", true)?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let new_version = Version::new(3, 2, 1);
+        manager.update_package_json_version(&new_version)?;
+
+        // Read the file and verify other fields are preserved
+        let content = fs::read_to_string(temp_dir.path().join("package.json"))?;
+        let json: serde_json::Value = serde_json::from_str(&content)?;
+
+        assert_eq!(json["version"], "3.2.1");
+        assert_eq!(json["name"], "test-package");
+        assert_eq!(json["description"], "A test package");
+        assert!(json["dependencies"].is_object());
+        assert!(json["devDependencies"].is_object());
+        Ok(())
+    }
+
+    #[test]
+    fn test_bump_version_with_package_json() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("VERSION"), "1.2.3")?;
+        create_package_json(temp_dir.path(), "1.2.3", true)?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        manager.bump_version(BumpType::Minor)?;
+
+        let version = manager.read_version_file()?;
+        assert_eq!(version, Version::new(1, 3, 0));
+
+        let package_json_version = manager.read_package_json_version()?;
+        assert_eq!(package_json_version, Version::new(1, 3, 0));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_detect_all_build_systems() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        create_test_files(temp_dir.path(), "1.0.0")?;
+        create_package_json(temp_dir.path(), "1.0.0", false)?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let systems = manager.detect_build_systems();
+
+        assert_eq!(systems.len(), 3);
+        assert!(systems.contains(&BuildSystem::Cargo));
+        assert!(systems.contains(&BuildSystem::PyProject));
+        assert!(systems.contains(&BuildSystem::PackageJson));
+        Ok(())
+    }
+
+    #[test]
+    fn test_sync_versions_with_package_json() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("VERSION"), "2.0.0")?;
+        create_package_json(temp_dir.path(), "1.0.0", true)?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        manager.sync_versions()?;
+
+        let package_json_version = manager.read_package_json_version()?;
+        assert_eq!(package_json_version, Version::new(2, 0, 0));
+        Ok(())
+    }
+
+    #[test]
+    fn test_verify_versions_with_package_json_mismatch() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("VERSION"), "2.0.0")?;
+        create_package_json(temp_dir.path(), "1.0.0", false)?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let result = manager.verify_versions_in_sync();
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Version files are not synchronized"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_package_json_with_prerelease() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        create_package_json(temp_dir.path(), "1.0.0-beta.2", false)?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let version = manager.read_package_json_version()?;
+
+        assert_eq!(version.major, 1);
+        assert_eq!(version.minor, 0);
+        assert_eq!(version.patch, 0);
+        assert_eq!(version.pre.as_str(), "beta.2");
+        Ok(())
+    }
+
+    #[test]
+    fn test_package_json_missing_version_field() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let package_json_content = r#"{"name": "test-package"}"#;
+        fs::write(temp_dir.path().join("package.json"), package_json_content)?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let result = manager.read_package_json_version();
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No version found in package.json"));
         Ok(())
     }
 }
