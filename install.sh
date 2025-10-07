@@ -193,7 +193,7 @@ main() {
     log_info "Latest version: $version"
 
     # Construct download URL
-    local filename="${TOOL_NAME}-${target}.zip"
+    local filename="${TOOL_NAME}-${target}.tar.gz"
     local download_url="$GITHUB_DOWNLOAD_URL/$REPO_OWNER/$REPO_NAME/releases/download/$version/$filename"
 
     # Create temporary directory
