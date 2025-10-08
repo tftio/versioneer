@@ -1,6 +1,6 @@
 //! Output formatting utilities for versioneer
 
-use console::{style, Emoji};
+use console::{Emoji, style};
 use std::io::IsTerminal;
 
 /// Output formatter that strips colors and emojis for non-TTY output

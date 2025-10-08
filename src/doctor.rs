@@ -32,7 +32,9 @@ pub fn run_doctor(manager: &VersionManager) -> i32 {
 
     if build_systems.is_empty() {
         println!("  ❌ No build system files detected");
-        println!("  ℹ️  At least one build system file (Cargo.toml, pyproject.toml, package.json) is required");
+        println!(
+            "  ℹ️  At least one build system file (Cargo.toml, pyproject.toml, package.json) is required"
+        );
         has_errors = true;
     } else {
         for system in &build_systems {
@@ -74,7 +76,10 @@ pub fn run_doctor(manager: &VersionManager) -> i32 {
             has_warnings = true;
         }
         Ok(None) => {
-            println!("  ✅ Running latest version (v{})", env!("CARGO_PKG_VERSION"));
+            println!(
+                "  ✅ Running latest version (v{})",
+                env!("CARGO_PKG_VERSION")
+            );
         }
         Err(e) => {
             println!("  ⚠️  Failed to check for updates: {e}");
@@ -116,12 +121,14 @@ fn check_for_updates() -> Result<Option<String>, String> {
         .as_str()
         .ok_or_else(|| "No tag_name in response".to_string())?;
 
-    let latest = tag_name.trim_start_matches("versioneer-v").trim_start_matches('v');
+    let latest = tag_name
+        .trim_start_matches("versioneer-v")
+        .trim_start_matches('v');
     let current = env!("CARGO_PKG_VERSION");
 
-    if latest != current {
-        Ok(Some(latest.to_string()))
-    } else {
+    if latest == current {
         Ok(None)
+    } else {
+        Ok(Some(latest.to_string()))
     }
 }

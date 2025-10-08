@@ -343,7 +343,10 @@ impl VersionManager {
 
         // Update the version field
         if let Some(obj) = json.as_object_mut() {
-            obj.insert("version".to_string(), serde_json::Value::String(version.to_string()));
+            obj.insert(
+                "version".to_string(),
+                serde_json::Value::String(version.to_string()),
+            );
         } else {
             anyhow::bail!("package.json root is not a JSON object");
         }
@@ -722,10 +725,12 @@ build-backend = "setuptools.build_meta"
         let result = manager.reset_version("invalid-version");
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid semantic version format"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid semantic version format")
+        );
 
         // Verify original version is unchanged
         let version = manager.read_version_file()?;
@@ -743,10 +748,12 @@ build-backend = "setuptools.build_meta"
         let result = manager.reset_version("");
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid semantic version format"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid semantic version format")
+        );
 
         Ok(())
     }
@@ -915,10 +922,12 @@ build-backend = "setuptools.build_meta"
         let result = manager.verify_versions_in_sync();
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Version files are not synchronized"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Version files are not synchronized")
+        );
         Ok(())
     }
 
@@ -947,10 +956,12 @@ build-backend = "setuptools.build_meta"
         let result = manager.read_package_json_version();
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("No version found in package.json"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No version found in package.json")
+        );
         Ok(())
     }
 }

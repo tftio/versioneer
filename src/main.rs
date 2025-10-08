@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::env;
 use std::path::PathBuf;
-use versioneer::{output::OutputFormatter, BumpType, VersionManager};
+use versioneer::{BumpType, VersionManager, output::OutputFormatter};
 
 mod completions;
 mod doctor;
@@ -281,11 +281,8 @@ fn main() -> Result<()> {
                 force,
                 install_dir,
             } => {
-                let exit_code = update::run_update(
-                    version.as_deref(),
-                    force,
-                    install_dir.as_deref(),
-                );
+                let exit_code =
+                    update::run_update(version.as_deref(), force, install_dir.as_deref());
                 std::process::exit(exit_code);
             }
         },

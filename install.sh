@@ -80,11 +80,12 @@ get_latest_version() {
     fi
 }
 
-# Download and verify checksum if available
+# Download and verify checksum (mandatory)
 download_and_verify() {
     local download_url="$1"
     local filename="$2"
     local temp_dir="$3"
+    local version="$4"
 
     log_info "Downloading $filename..."
 
@@ -97,31 +98,47 @@ download_and_verify() {
         exit 1
     fi
 
-    # Try to download and verify checksum if available
-    local checksum_url="${download_url}.sha256"
-    local checksum_file="$temp_dir/${filename}.sha256"
+    # Download and verify checksum (mandatory)
+    # Checksum file is named without the archive extension (e.g., versioneer-aarch64-apple-darwin.sha256)
+    local base_filename="${filename%.tar.gz}"
+    base_filename="${base_filename%.zip}"
+    local checksum_url="${GITHUB_DOWNLOAD_URL}/${REPO_OWNER}/${REPO_NAME}/releases/download/${version}/${base_filename}.sha256"
+    local checksum_file="$temp_dir/${base_filename}.sha256"
 
+    log_info "Downloading checksum file..."
     if command -v curl >/dev/null 2>&1; then
-        if curl -fsSL "$checksum_url" -o "$checksum_file" 2>/dev/null; then
-            log_info "Verifying checksum..."
-            if command -v sha256sum >/dev/null 2>&1; then
-                (cd "$temp_dir" && sha256sum -c "$checksum_file") || {
-                    log_error "Checksum verification failed!"
-                    exit 1
-                }
-                log_success "Checksum verification passed"
-            elif command -v shasum >/dev/null 2>&1; then
-                (cd "$temp_dir" && shasum -a 256 -c "$checksum_file") || {
-                    log_error "Checksum verification failed!"
-                    exit 1
-                }
-                log_success "Checksum verification passed"
-            else
-                log_warn "No checksum utility available, skipping verification"
-            fi
-        else
-            log_warn "No checksum file available, skipping verification"
+        if ! curl -fsSL "$checksum_url" -o "$checksum_file" 2>/dev/null; then
+            log_error "Checksum file not available at: $checksum_url"
+            log_error "Checksum verification is mandatory for security."
+            exit 1
         fi
+    else
+        log_error "curl is required for checksum download."
+        exit 1
+    fi
+
+    log_info "Verifying checksum..."
+    # Extract expected hash and verify directly
+    local expected_hash=$(cut -d' ' -f1 "$checksum_file")
+    local actual_hash
+
+    if command -v sha256sum >/dev/null 2>&1; then
+        actual_hash=$(sha256sum "$temp_dir/$filename" | cut -d' ' -f1)
+    elif command -v shasum >/dev/null 2>&1; then
+        actual_hash=$(shasum -a 256 "$temp_dir/$filename" | cut -d' ' -f1)
+    else
+        log_error "No checksum utility available (sha256sum or shasum required)."
+        log_error "Checksum verification is mandatory for security."
+        exit 1
+    fi
+
+    if [ "$expected_hash" = "$actual_hash" ]; then
+        log_success "Checksum verification passed"
+    else
+        log_error "Checksum verification failed!"
+        log_error "Expected: $expected_hash"
+        log_error "Actual:   $actual_hash"
+        exit 1
     fi
 }
 
@@ -202,7 +219,7 @@ main() {
     trap "rm -rf \"$temp_dir\"" EXIT
 
     # Download and verify
-    download_and_verify "$download_url" "$filename" "$temp_dir"
+    download_and_verify "$download_url" "$filename" "$temp_dir" "$version"
 
     # Extract archive
     extract_archive "$filename" "$temp_dir"
