@@ -3,7 +3,12 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::env;
+use std::path::PathBuf;
 use versioneer::{output::OutputFormatter, BumpType, VersionManager};
+
+mod completions;
+mod doctor;
+mod update;
 
 #[derive(Parser)]
 #[command(name = "versioneer")]
@@ -69,6 +74,24 @@ enum Commands {
         /// Custom tag format (default: {repository_name}-v{version})
         #[arg(long)]
         tag_format: Option<String>,
+    },
+    /// Generate shell completion scripts
+    Completions {
+        /// Shell to generate completions for
+        shell: clap_complete::Shell,
+    },
+    /// Check health and configuration
+    Doctor,
+    /// Update to latest version
+    Update {
+        /// Specific version to install
+        version: Option<String>,
+        /// Force update even if already up-to-date
+        #[arg(short, long)]
+        force: bool,
+        /// Custom installation directory
+        #[arg(long)]
+        install_dir: Option<PathBuf>,
     },
 }
 
@@ -245,6 +268,25 @@ fn main() -> Result<()> {
                         std::process::exit(1);
                     }
                 }
+            }
+            Commands::Completions { shell } => {
+                completions::generate_completions(shell);
+            }
+            Commands::Doctor => {
+                let exit_code = doctor::run_doctor(&manager);
+                std::process::exit(exit_code);
+            }
+            Commands::Update {
+                version,
+                force,
+                install_dir,
+            } => {
+                let exit_code = update::run_update(
+                    version.as_deref(),
+                    force,
+                    install_dir.as_deref(),
+                );
+                std::process::exit(exit_code);
             }
         },
     }
