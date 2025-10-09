@@ -156,4 +156,110 @@ mod tests {
         let msg = formatter.success("test");
         assert!(msg.contains("test"));
     }
+
+    #[test]
+    fn test_tty_output_contains_content() {
+        // Test TTY mode still contains the message even if it adds formatting
+        let formatter_tty = OutputFormatter { is_tty: true };
+
+        let success_msg = formatter_tty.success("success test");
+        assert!(success_msg.contains("success test"));
+
+        let error_msg = formatter_tty.error("error test");
+        assert!(error_msg.contains("error test"));
+
+        let warning_msg = formatter_tty.warning("warning test");
+        assert!(warning_msg.contains("warning test"));
+
+        let version_msg = formatter_tty.version("1.2.3");
+        assert!(version_msg.contains("1.2.3"));
+    }
+
+    #[test]
+    fn test_special_characters_in_messages() {
+        let formatter = OutputFormatter { is_tty: false };
+
+        // Test with special characters
+        assert_eq!(
+            formatter.success("test with 日本語"),
+            "✓ test with 日本語"
+        );
+        assert_eq!(
+            formatter.error("error: 'quoted' \"values\""),
+            "✗ error: 'quoted' \"values\""
+        );
+        assert_eq!(
+            formatter.warning("path/to/file.txt"),
+            "! path/to/file.txt"
+        );
+    }
+
+    #[test]
+    fn test_newlines_and_multiline() {
+        let formatter = OutputFormatter { is_tty: false };
+
+        // Test with newlines
+        let msg_with_newline = formatter.success("line1\nline2");
+        assert!(msg_with_newline.contains("line1"));
+        assert!(msg_with_newline.contains("line2"));
+    }
+
+    #[test]
+    fn test_empty_messages() {
+        let formatter = OutputFormatter { is_tty: false };
+
+        assert_eq!(formatter.success(""), "✓ ");
+        assert_eq!(formatter.error(""), "✗ ");
+        assert_eq!(formatter.warning(""), "! ");
+        assert_eq!(formatter.version(""), "Current version: ");
+    }
+
+    #[test]
+    fn test_long_messages() {
+        let formatter = OutputFormatter { is_tty: false };
+
+        let long_msg = "a".repeat(1000);
+        let result = formatter.success(&long_msg);
+        // Verify message is included even if very long
+        assert!(result.contains(&long_msg));
+        assert!(result.len() > 1000);
+    }
+
+    #[test]
+    fn test_emoji_fallbacks_non_tty() {
+        let formatter_no_tty = OutputFormatter { is_tty: false };
+
+        // Verify all emojis fall back to ASCII characters in non-TTY mode
+        assert!(formatter_no_tty.success("test").starts_with('✓'));
+        assert!(formatter_no_tty.error("test").starts_with('✗'));
+        assert!(formatter_no_tty.warning("test").starts_with('!'));
+        assert!(!formatter_no_tty.build_systems_header().contains("🔍"));
+        assert!(!formatter_no_tty.git_tag("v1.0.0").contains("🏷️"));
+    }
+
+    #[test]
+    fn test_new_formatter_creates_valid_instance() {
+        let formatter = OutputFormatter::new();
+        // Verify it creates a formatter with the correct TTY detection
+        let msg = formatter.success("test");
+        assert!(msg.contains("test"));
+    }
+
+    #[test]
+    fn test_all_output_methods_with_both_modes() {
+        // Test both TTY and non-TTY modes produce valid output
+        for is_tty in [true, false] {
+            let formatter = OutputFormatter { is_tty };
+
+            // All methods should produce non-empty output
+            assert!(!formatter.success("msg").is_empty());
+            assert!(!formatter.error("msg").is_empty());
+            assert!(!formatter.warning("msg").is_empty());
+            assert!(!formatter.version("1.0.0").is_empty());
+            assert!(!formatter.build_systems_header().is_empty());
+            assert!(!formatter.sync_status(true).is_empty());
+            assert!(!formatter.sync_status(false).is_empty());
+            assert!(!formatter.git_tag("v1.0.0").is_empty());
+        }
+    }
 }

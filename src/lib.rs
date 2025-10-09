@@ -964,4 +964,319 @@ build-backend = "setuptools.build_meta"
         );
         Ok(())
     }
+
+    #[test]
+    fn test_pyproject_toml_missing_version_field() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let pyproject_content = r#"[project]
+name = "test"
+"#;
+        fs::write(temp_dir.path().join("pyproject.toml"), pyproject_content)?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let result = manager.read_pyproject_version();
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No version found in pyproject.toml")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_cargo_toml_missing_version_field() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let cargo_content = r#"[package]
+name = "test"
+"#;
+        fs::write(temp_dir.path().join("Cargo.toml"), cargo_content)?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let result = manager.read_cargo_version();
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No version found in Cargo.toml")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_package_json_invalid_json() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("package.json"), "not valid json {{")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let result = manager.read_package_json_version();
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Failed to parse package.json")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_pyproject_toml_invalid_toml() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("pyproject.toml"), "invalid toml [[[")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let result = manager.read_pyproject_version();
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Failed to parse pyproject.toml")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_cargo_toml_invalid_toml() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("Cargo.toml"), "invalid toml [[[")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let result = manager.read_cargo_version();
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Failed to parse Cargo.toml")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_version_file_invalid_semver() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("VERSION"), "not-a-version")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let result = manager.read_version_file();
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid version format")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_version_file_with_whitespace() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("VERSION"), "  1.2.3  \n")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let version = manager.read_version_file()?;
+
+        assert_eq!(version, Version::new(1, 2, 3));
+        Ok(())
+    }
+
+    #[test]
+    fn test_bump_version_with_out_of_sync_error() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        create_test_files(temp_dir.path(), "1.0.0")?;
+
+        // Manually modify Cargo.toml to be out of sync
+        let cargo_content = r#"[package]
+name = "test"
+version = "2.0.0"
+"#;
+        fs::write(temp_dir.path().join("Cargo.toml"), cargo_content)?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let result = manager.bump_version(BumpType::Patch);
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Version files are not synchronized")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_sync_versions_with_all_three_build_systems() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        // Create files with 1.0.0 first
+        create_test_files(temp_dir.path(), "1.0.0")?;
+        create_package_json(temp_dir.path(), "1.0.0", false)?;
+
+        // Then update VERSION file to 5.0.0
+        fs::write(temp_dir.path().join("VERSION"), "5.0.0")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        manager.sync_versions()?;
+
+        // Verify all versions are now 5.0.0
+        assert_eq!(manager.read_cargo_version()?, Version::new(5, 0, 0));
+        assert_eq!(manager.read_pyproject_version()?, Version::new(5, 0, 0));
+        assert_eq!(manager.read_package_json_version()?, Version::new(5, 0, 0));
+        Ok(())
+    }
+
+    #[test]
+    fn test_verify_versions_with_all_systems_in_sync() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        create_test_files(temp_dir.path(), "3.2.1")?;
+        create_package_json(temp_dir.path(), "3.2.1", false)?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let result = manager.verify_versions_in_sync();
+
+        assert!(result.is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn test_extract_repo_name_edge_cases() {
+        // Test SSH URLs with ports
+        assert_eq!(
+            VersionManager::extract_repo_name_from_url("ssh://git@github.com:22/user/repo.git"),
+            Some("repo".to_string())
+        );
+
+        // Test URLs without .git extension
+        assert_eq!(
+            VersionManager::extract_repo_name_from_url("git@github.com:user/myrepo"),
+            Some("myrepo".to_string())
+        );
+
+        // Test HTTPS URLs without .git
+        assert_eq!(
+            VersionManager::extract_repo_name_from_url("https://github.com/org/project"),
+            Some("project".to_string())
+        );
+
+        // Test with special characters in repo name
+        assert_eq!(
+            VersionManager::extract_repo_name_from_url(
+                "https://github.com/user/my-awesome-project.git"
+            ),
+            Some("my-awesome-project".to_string())
+        );
+    }
+
+    #[test]
+    #[allow(clippy::literal_string_with_formatting_args)]
+    fn test_tag_format_with_special_characters() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        create_test_files(temp_dir.path(), "1.2.3")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let version = Version::new(1, 2, 3);
+
+        // Test various special characters in tag format
+        let result = manager.format_tag_string("release/{version}", &version)?;
+        assert_eq!(result, "release/1.2.3");
+
+        let result = manager.format_tag_string("v{major}_{minor}_{patch}", &version)?;
+        assert_eq!(result, "v1_2_3");
+
+        let result = manager.format_tag_string("{repository_name}@{version}", &version)?;
+        assert!(result.contains("@1.2.3"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_semver_with_build_metadata() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        create_test_files(temp_dir.path(), "1.0.0")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        manager.reset_version("1.0.0+build.123")?;
+
+        let version = manager.read_version_file()?;
+        assert_eq!(version.major, 1);
+        assert_eq!(version.minor, 0);
+        assert_eq!(version.patch, 0);
+        assert_eq!(version.build.as_str(), "build.123");
+        Ok(())
+    }
+
+    #[test]
+    fn test_package_json_not_an_object() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("package.json"), "[]")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let result = manager.read_package_json_version();
+
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_update_package_json_not_an_object() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("package.json"), "[]")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let result = manager.update_package_json_version(&Version::new(1, 0, 0));
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("package.json root is not a JSON object")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_toml_version_update_no_version_field() {
+        let content = "[package]\nname = \"test\"\n";
+        let result =
+            VersionManager::update_toml_version(content, &Version::new(1, 0, 0), "package");
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No version field found")
+        );
+    }
+
+    #[test]
+    fn test_cargo_toml_with_workspace() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let cargo_content = r#"[workspace]
+members = ["member1", "member2"]
+
+[package]
+name = "test"
+version = "1.2.3"
+"#;
+        fs::write(temp_dir.path().join("Cargo.toml"), cargo_content)?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let version = manager.read_cargo_version()?;
+
+        assert_eq!(version, Version::new(1, 2, 3));
+        Ok(())
+    }
 }

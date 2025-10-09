@@ -72,4 +72,31 @@ mod tests {
         let cmd = Cli::command();
         assert_eq!(cmd.get_name(), "versioneer");
     }
+
+    #[test]
+    fn test_generate_completions_elvish() {
+        generate_completions(Shell::Elvish);
+    }
+
+    #[test]
+    fn test_generate_completions_powershell() {
+        generate_completions(Shell::PowerShell);
+    }
+
+    #[test]
+    fn test_all_shells_generate_without_panic() {
+        // Test that all supported shells can generate completions
+        let shells = vec![
+            Shell::Bash,
+            Shell::Zsh,
+            Shell::Fish,
+            Shell::Elvish,
+            Shell::PowerShell,
+        ];
+
+        for shell in shells {
+            // Just verify no panics occur during generation
+            generate_completions(shell);
+        }
+    }
 }
