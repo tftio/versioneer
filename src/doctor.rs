@@ -165,4 +165,178 @@ mod tests {
         // Should return 0 or 1 (with warnings from update check)
         assert!(exit_code == 0 || exit_code == 1);
     }
+
+    #[test]
+    fn test_doctor_with_missing_version_file() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("Cargo.toml"),
+            "[package]\nname = \"test\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+
+        let manager = VersionManager::new(temp_dir.path());
+        let exit_code = run_doctor(&manager);
+
+        // Should return 1 (error) for missing VERSION file
+        assert_eq!(exit_code, 1);
+    }
+
+    #[test]
+    fn test_doctor_with_corrupted_version_file() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("VERSION"), "not-a-version\n").unwrap();
+        fs::write(
+            temp_dir.path().join("Cargo.toml"),
+            "[package]\nname = \"test\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+
+        let manager = VersionManager::new(temp_dir.path());
+        let exit_code = run_doctor(&manager);
+
+        // Should return 1 (error) for invalid version
+        assert_eq!(exit_code, 1);
+    }
+
+    #[test]
+    fn test_doctor_with_no_build_systems() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("VERSION"), "1.0.0\n").unwrap();
+
+        let manager = VersionManager::new(temp_dir.path());
+        let exit_code = run_doctor(&manager);
+
+        // Should return 1 (error) for no build systems
+        assert_eq!(exit_code, 1);
+    }
+
+    #[test]
+    fn test_doctor_with_invalid_cargo_toml() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("VERSION"), "1.0.0\n").unwrap();
+        fs::write(
+            temp_dir.path().join("Cargo.toml"),
+            "invalid toml syntax [[[",
+        )
+        .unwrap();
+
+        let manager = VersionManager::new(temp_dir.path());
+        let exit_code = run_doctor(&manager);
+
+        // Should return 1 (error) for invalid Cargo.toml
+        assert_eq!(exit_code, 1);
+    }
+
+    #[test]
+    fn test_doctor_with_missing_version_in_cargo_toml() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("VERSION"), "1.0.0\n").unwrap();
+        fs::write(
+            temp_dir.path().join("Cargo.toml"),
+            "[package]\nname = \"test\"\n",
+        )
+        .unwrap();
+
+        let manager = VersionManager::new(temp_dir.path());
+        let exit_code = run_doctor(&manager);
+
+        // Should return 1 (error) for missing version in Cargo.toml
+        assert_eq!(exit_code, 1);
+    }
+
+    #[test]
+    fn test_doctor_with_version_mismatch() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("VERSION"), "1.0.0\n").unwrap();
+        fs::write(
+            temp_dir.path().join("Cargo.toml"),
+            "[package]\nname = \"test\"\nversion = \"2.0.0\"\n",
+        )
+        .unwrap();
+
+        let manager = VersionManager::new(temp_dir.path());
+        let exit_code = run_doctor(&manager);
+
+        // Should return 1 (error) for version mismatch
+        assert_eq!(exit_code, 1);
+    }
+
+    #[test]
+    fn test_doctor_with_invalid_pyproject_toml() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("VERSION"), "1.0.0\n").unwrap();
+        fs::write(
+            temp_dir.path().join("pyproject.toml"),
+            "invalid toml syntax [[[",
+        )
+        .unwrap();
+
+        let manager = VersionManager::new(temp_dir.path());
+        let exit_code = run_doctor(&manager);
+
+        // Should return 1 (error) for invalid pyproject.toml
+        assert_eq!(exit_code, 1);
+    }
+
+    #[test]
+    fn test_doctor_with_invalid_package_json() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("VERSION"), "1.0.0\n").unwrap();
+        fs::write(
+            temp_dir.path().join("package.json"),
+            "invalid json {{{",
+        )
+        .unwrap();
+
+        let manager = VersionManager::new(temp_dir.path());
+        let exit_code = run_doctor(&manager);
+
+        // Should return 1 (error) for invalid package.json
+        assert_eq!(exit_code, 1);
+    }
+
+    #[test]
+    fn test_doctor_with_multiple_build_systems_in_sync() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("VERSION"), "1.0.0\n").unwrap();
+        fs::write(
+            temp_dir.path().join("Cargo.toml"),
+            "[package]\nname = \"test\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        fs::write(
+            temp_dir.path().join("pyproject.toml"),
+            "[project]\nname = \"test\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+
+        let manager = VersionManager::new(temp_dir.path());
+        let exit_code = run_doctor(&manager);
+
+        // Should return 0 (may have update warning)
+        assert!(exit_code == 0 || exit_code == 1);
+    }
+
+    #[test]
+    fn test_doctor_with_multiple_build_systems_out_of_sync() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("VERSION"), "1.0.0\n").unwrap();
+        fs::write(
+            temp_dir.path().join("Cargo.toml"),
+            "[package]\nname = \"test\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        fs::write(
+            temp_dir.path().join("pyproject.toml"),
+            "[project]\nname = \"test\"\nversion = \"2.0.0\"\n",
+        )
+        .unwrap();
+
+        let manager = VersionManager::new(temp_dir.path());
+        let exit_code = run_doctor(&manager);
+
+        // Should return 1 (error) for out of sync
+        assert_eq!(exit_code, 1);
+    }
 }

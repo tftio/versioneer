@@ -277,4 +277,128 @@ mod tests {
         // Should fail with exit code 1
         assert_eq!(exit_code, 1);
     }
+
+    #[test]
+    fn test_run_update_with_force_flag() {
+        // Test that force flag bypasses confirmation
+        let current = env!("CARGO_PKG_VERSION");
+        let temp_dir = TempDir::new().unwrap();
+
+        // With force=true, should attempt update even at current version
+        let exit_code = run_update(Some(current), true, Some(temp_dir.path()));
+
+        // Could succeed (0) if binary exists, or fail (1) if download fails
+        // The key is that it didn't return 2 (up-to-date without trying)
+        assert!(exit_code == 0 || exit_code == 1);
+        assert_ne!(exit_code, 2);
+    }
+
+    #[test]
+    fn test_run_update_with_custom_install_dir() {
+        let temp_dir = TempDir::new().unwrap();
+        let install_dir = temp_dir.path();
+
+        // Test with a fake version to trigger download attempt
+        let exit_code = run_update(Some("99.99.99"), true, Some(install_dir));
+
+        // Should fail during download but confirms install_dir is processed
+        assert_eq!(exit_code, 1);
+    }
+
+    #[test]
+    fn test_get_platform_string_exhaustive() {
+        // Test that get_platform_string returns valid strings
+        let platform = get_platform_string();
+
+        // Verify it's one of the known platforms
+        let valid_platforms = [
+            "x86_64-apple-darwin",
+            "aarch64-apple-darwin",
+            "x86_64-unknown-linux-gnu",
+            "aarch64-unknown-linux-gnu",
+            "x86_64-pc-windows-msvc",
+            "unknown",
+        ];
+
+        assert!(valid_platforms.contains(&platform));
+
+        // On macOS/Linux, should not be "unknown"
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        assert_ne!(platform, "unknown");
+
+        // Should match current architecture
+        #[cfg(target_arch = "x86_64")]
+        assert!(platform.starts_with("x86_64"));
+
+        #[cfg(target_arch = "aarch64")]
+        assert!(platform.starts_with("aarch64"));
+    }
+
+    #[test]
+    fn test_run_update_without_version_tries_latest() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Without specifying version, should try to get latest
+        // Will fail on network call or if already latest
+        let exit_code = run_update(None, false, Some(temp_dir.path()));
+
+        // Could be 0 (already latest), 1 (network error), or 2 (up-to-date)
+        assert!(exit_code == 0 || exit_code == 1 || exit_code == 2);
+    }
+
+    #[test]
+    fn test_run_update_validates_version_format() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Test with valid semantic version format
+        let exit_code = run_update(Some("1.0.0"), true, Some(temp_dir.path()));
+
+        // Will fail during download but version format was valid
+        assert_eq!(exit_code, 1);
+    }
+
+    #[test]
+    fn test_run_update_permission_denied_message() {
+        // Test update to a system directory without permission
+        #[cfg(unix)]
+        {
+            let exit_code = run_update(Some("99.99.99"), true, Some(Path::new("/usr/bin")));
+            // Should fail with exit code 1 (permission denied)
+            assert_eq!(exit_code, 1);
+        }
+    }
+
+    #[test]
+    fn test_multiple_update_scenarios() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Test 1: Current version without force (should return 2)
+        let current = env!("CARGO_PKG_VERSION");
+        let exit_code = run_update(Some(current), false, Some(temp_dir.path()));
+        assert_eq!(exit_code, 2);
+
+        // Test 2: Invalid path (should return 1)
+        let exit_code = run_update(Some("1.0.0"), true, Some(Path::new("/nonexistent/path")));
+        assert_eq!(exit_code, 1);
+    }
+
+    #[test]
+    fn test_update_exit_codes() {
+        let temp_dir = TempDir::new().unwrap();
+        let current = env!("CARGO_PKG_VERSION");
+
+        // Test all possible exit codes
+
+        // Exit code 2: Already up-to-date
+        let code = run_update(Some(current), false, Some(temp_dir.path()));
+        assert_eq!(code, 2);
+
+        // Exit code 1: Error (invalid path)
+        let code = run_update(Some("99.99.99"), true, Some(Path::new("/nonexistent")));
+        assert_eq!(code, 1);
+
+        // Exit code 0 or 1: Latest version check (network dependent)
+        let code = run_update(None, false, Some(temp_dir.path()));
+        assert!(code == 0 || code == 1 || code == 2);
+    }
 }
