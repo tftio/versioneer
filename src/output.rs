@@ -130,4 +130,30 @@ mod tests {
         assert_eq!(formatter_no_tty.sync_status(true), "✓");
         assert_eq!(formatter_no_tty.sync_status(false), "✗");
     }
+
+    #[test]
+    fn test_build_systems_header() {
+        let formatter_no_tty = OutputFormatter { is_tty: false };
+        assert_eq!(
+            formatter_no_tty.build_systems_header(),
+            "Detected build systems:"
+        );
+    }
+
+    #[test]
+    fn test_git_tag() {
+        let formatter_no_tty = OutputFormatter { is_tty: false };
+        assert_eq!(
+            formatter_no_tty.git_tag("v1.0.0"),
+            "Created git tag: v1.0.0"
+        );
+    }
+
+    #[test]
+    fn test_default_formatter() {
+        let formatter = OutputFormatter::default();
+        // Verify default creates a formatter
+        let msg = formatter.success("test");
+        assert!(msg.contains("test"));
+    }
 }
