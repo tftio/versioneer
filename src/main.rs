@@ -5,10 +5,9 @@ use clap::{Parser, Subcommand};
 use std::env;
 use std::path::PathBuf;
 use versioneer::{BumpType, VersionManager, output::OutputFormatter};
+use workhelix_cli_common::LicenseType;
 
-mod completions;
 mod doctor;
-mod update;
 
 #[derive(Parser)]
 #[command(name = "versioneer")]
@@ -23,12 +22,14 @@ struct Cli {
 enum Commands {
     /// Show version information
     Version,
+    /// Show license information
+    License,
     /// Bump the major version (x.y.z -> (x+1).0.0)
     Major {
         /// Create a git tag after bumping version
         #[arg(short, long)]
         tag: bool,
-        /// Custom tag format (default: {repository_name}-v{version})
+        /// Custom tag format (default: v{version})
         #[arg(long)]
         tag_format: Option<String>,
     },
@@ -37,7 +38,7 @@ enum Commands {
         /// Create a git tag after bumping version
         #[arg(short, long)]
         tag: bool,
-        /// Custom tag format (default: {repository_name}-v{version})
+        /// Custom tag format (default: v{version})
         #[arg(long)]
         tag_format: Option<String>,
     },
@@ -46,7 +47,7 @@ enum Commands {
         /// Create a git tag after bumping version
         #[arg(short, long)]
         tag: bool,
-        /// Custom tag format (default: {repository_name}-v{version})
+        /// Custom tag format (default: v{version})
         #[arg(long)]
         tag_format: Option<String>,
     },
@@ -60,7 +61,7 @@ enum Commands {
     Verify,
     /// Create a git tag for the current version
     Tag {
-        /// Custom tag format (default: {repository_name}-v{version})
+        /// Custom tag format (default: v{version})
         #[arg(long)]
         tag_format: Option<String>,
     },
@@ -71,7 +72,7 @@ enum Commands {
         /// Create a git tag after resetting version
         #[arg(short, long)]
         tag: bool,
-        /// Custom tag format (default: {repository_name}-v{version})
+        /// Custom tag format (default: v{version})
         #[arg(long)]
         tag_format: Option<String>,
     },
@@ -139,6 +140,9 @@ fn main() -> Result<()> {
         Some(command) => match command {
             Commands::Version => {
                 println!("versioneer {}", env!("CARGO_PKG_VERSION"));
+            }
+            Commands::License => {
+                println!("{}", workhelix_cli_common::license::display_license("versioneer", LicenseType::MIT));
             }
             Commands::Major { tag, tag_format } => {
                 manager
@@ -270,7 +274,7 @@ fn main() -> Result<()> {
                 }
             }
             Commands::Completions { shell } => {
-                completions::generate_completions(shell);
+                workhelix_cli_common::completions::generate_completions::<Cli>(shell);
             }
             Commands::Doctor => {
                 let exit_code = doctor::run_doctor(&manager);
@@ -281,8 +285,14 @@ fn main() -> Result<()> {
                 force,
                 install_dir,
             } => {
-                let exit_code =
-                    update::run_update(version.as_deref(), force, install_dir.as_deref());
+                let repo_info = workhelix_cli_common::RepoInfo::new("workhelix", "versioneer", "v");
+                let exit_code = workhelix_cli_common::update::run_update(
+                    &repo_info,
+                    env!("CARGO_PKG_VERSION"),
+                    version.as_deref(),
+                    force,
+                    install_dir.as_deref(),
+                );
                 std::process::exit(exit_code);
             }
         },

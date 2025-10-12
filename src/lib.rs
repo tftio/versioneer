@@ -396,7 +396,7 @@ impl VersionManager {
         let tag_name = if let Some(format) = tag_format {
             self.format_tag_string(format, &version)?
         } else {
-            self.default_tag_format(&version)?
+            Self::default_tag_format(&version)
         };
 
         // Get the current HEAD commit
@@ -461,10 +461,9 @@ impl VersionManager {
         None
     }
 
-    /// Generate default tag format: {repository_name}-v{version}
-    fn default_tag_format(&self, version: &Version) -> Result<String> {
-        let repo_name = self.get_repository_name()?;
-        Ok(format!("{repo_name}-v{version}"))
+    /// Generate default tag format: v{version}
+    fn default_tag_format(version: &Version) -> String {
+        format!("v{version}")
     }
 
     /// Format tag string with placeholders

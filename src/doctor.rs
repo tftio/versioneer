@@ -1,6 +1,7 @@
 //! Health check and diagnostics module.
 
 use versioneer::VersionManager;
+use workhelix_cli_common::RepoInfo;
 
 /// Run doctor command to check health and configuration.
 ///
@@ -68,7 +69,8 @@ pub fn run_doctor(manager: &VersionManager) -> i32 {
 
     // Check for updates
     println!("Updates:");
-    match check_for_updates() {
+    let repo_info = RepoInfo::new("workhelix", "versioneer", "v");
+    match workhelix_cli_common::doctor::check_for_updates(&repo_info, env!("CARGO_PKG_VERSION")) {
         Ok(Some(latest)) => {
             let current = env!("CARGO_PKG_VERSION");
             println!("  ⚠️  Update available: v{latest} (current: v{current})");
@@ -102,36 +104,6 @@ pub fn run_doctor(manager: &VersionManager) -> i32 {
     }
 }
 
-fn check_for_updates() -> Result<Option<String>, String> {
-    let client = reqwest::blocking::Client::builder()
-        .user_agent("versioneer-doctor")
-        .timeout(std::time::Duration::from_secs(5))
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    let url = "https://api.github.com/repos/workhelix/versioneer/releases/latest";
-    let response: serde_json::Value = client
-        .get(url)
-        .send()
-        .map_err(|e| e.to_string())?
-        .json()
-        .map_err(|e| e.to_string())?;
-
-    let tag_name = response["tag_name"]
-        .as_str()
-        .ok_or_else(|| "No tag_name in response".to_string())?;
-
-    let latest = tag_name
-        .trim_start_matches("versioneer-v")
-        .trim_start_matches('v');
-    let current = env!("CARGO_PKG_VERSION");
-
-    if latest == current {
-        Ok(None)
-    } else {
-        Ok(Some(latest.to_string()))
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -139,14 +111,6 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
-    #[test]
-    fn test_check_for_updates_handles_network_errors() {
-        // Testing a function that makes network calls will fail in offline environments,
-        // so we just test that it returns a Result type
-        let result = check_for_updates();
-        // Either Ok or Err is acceptable since we're testing structure
-        assert!(result.is_ok() || result.is_err());
-    }
 
     #[test]
     fn test_run_doctor_returns_zero() {
