@@ -106,13 +106,6 @@ versioneer minor   # 1.2.3 -> 1.3.0
 versioneer major   # 1.2.3 -> 2.0.0
 ```
 
-Bump version with git tagging:
-```bash
-versioneer patch --tag                    # Bump and create tag: {repository_name}-v1.2.4
-versioneer minor --tag --tag-format "v{version}"   # Bump and create tag: v1.3.0
-versioneer major --tag --tag-format "release-{major}.{minor}.{patch}"  # Custom format
-```
-
 Show current version:
 ```bash
 versioneer show
@@ -133,13 +126,6 @@ Verify all version files are synchronized:
 versioneer verify
 ```
 
-Create git tag for current version:
-```bash
-versioneer tag                             # Create tag: {repository_name}-v{current_version}
-versioneer tag --tag-format "v{version}"   # Create tag: v{current_version}
-versioneer tag --tag-format "{major}.{minor}.{patch}-release"  # Create tag: 1.2.3-release
-```
-
 ### Workflow
 
 1. **Initialize your project** with a VERSION file containing your starting version (e.g., `1.0.0`)
@@ -147,6 +133,7 @@ versioneer tag --tag-format "{major}.{minor}.{patch}-release"  # Create tag: 1.2
 3. **Run `versioneer sync`** to synchronize all files to the VERSION file content
 4. **Use version bump commands** (`major`, `minor`, `patch`) to increment versions
 5. **All files are updated automatically** and kept in sync
+6. **Use your build system's release tools** to create git tags and publish releases
 
 ### Version Validation
 
@@ -158,99 +145,51 @@ Before performing version bumps, versioneer verifies that all version files are 
 
 This ensures that your version files never get out of sync accidentally.
 
-## Git Tagging
-
-Versioneer can automatically create git tags when bumping versions, making it easy to track releases in your repository.
-
-### Tag Format Placeholders
-
-You can customize the tag format using these placeholders:
-
-- `{repository_name}` - Name of the repository (from git remote or directory name)
-- `{version}` - Full semantic version (e.g., "1.2.3")
-- `{major}` - Major version number
-- `{minor}` - Minor version number
-- `{patch}` - Patch version number
-
-### Default Tag Format
-
-If no custom format is specified, tags use the format: `{repository_name}-v{version}`
-
-Examples:
-- `versioneer-v1.2.3`
-- `my-project-v2.0.0`
-
-### Custom Tag Formats
-
-```bash
-# Simple version tag
-versioneer patch --tag --tag-format "v{version}"
-# Result: v1.2.4
-
-# Release format with individual components
-versioneer minor --tag --tag-format "release-{major}.{minor}.{patch}"
-# Result: release-1.3.0
-
-# Project-specific format
-versioneer major --tag --tag-format "{repository_name}-release-{major}.{minor}"
-# Result: my-project-release-2.0
-```
-
-### Standalone Tagging
-
-Create a tag for the current version without bumping:
-
-```bash
-versioneer tag                           # Use default format
-versioneer tag --tag-format "v{version}" # Use custom format
-```
-
 ## Automated Release Management
 
-**Enterprise Release Process** - Versioneer integrates with automated release workflows to prevent version/tag synchronization issues:
+**Enterprise Release Process** - Versioneer integrates with automated release workflows to prevent version synchronization issues:
 
 ### Multi-Layer Validation System
 
 Versioneer is designed to work with a comprehensive validation system:
 
-1. **Layer 1: Git Hooks Validation** - Pre-push hooks verify version synchronization
-2. **Layer 2: GitHub Actions Validation** - CI validates tag versions match Cargo.toml
-3. **Layer 3: Automated Release Script** - Complete automated release workflow
+1. **Layer 1: Version Synchronization** - Ensures VERSION file matches all build system files
+2. **Layer 2: Git Hooks Validation** - Pre-push hooks verify version synchronization
+3. **Layer 3: GitHub Actions Validation** - CI validates versions before building releases
 4. **Layer 4: Quality Gates** - Tests, lints, audits before every release
 
 ### Integration with Release Scripts
 
-For projects using automated release management, use the provided release script instead of individual versioneer commands:
+For projects using automated release management, integrate versioneer with your release scripts:
 
 ```bash
-# Automated release (recommended for production projects)
-./scripts/release.sh patch   # Runs versioneer patch + quality checks + git operations
-./scripts/release.sh minor   # Runs versioneer minor + quality checks + git operations
-./scripts/release.sh major   # Runs versioneer major + quality checks + git operations
+# Example automated release workflow
+versioneer patch             # Bump version across all files
+git add VERSION Cargo.toml   # Stage version changes
+git commit -m "bump version" # Commit version bump
+git tag v$(cat VERSION)      # Create git tag
+git push && git push --tags  # Publish to trigger CI/CD
 
-# Individual versioneer commands (for manual workflows)
-versioneer patch             # Just version bumping
-versioneer sync              # Just synchronization
-versioneer verify            # Just verification
-versioneer tag               # Just git tagging
+# Or use task runners (e.g., just, make)
+just release patch           # Automated workflow with quality gates
 ```
 
 ### Preventing Common Release Problems
 
 Versioneer solves these critical issues:
-- **Version mismatches**: GitHub releases with tag `v1.0.9` containing binary version `1.0.8`
-- **Install failures**: Checksum verification failures due to incorrect URL construction
-- **Tag inconsistencies**: Manual git tags not matching actual code versions
-- **Process errors**: Human mistakes in manual version management
+- **Version mismatches**: Ensures VERSION, Cargo.toml, pyproject.toml, and package.json always match
+- **Build failures**: Pre-bump verification prevents partial updates
+- **Install failures**: Consistent versions across all build systems
+- **Process errors**: Atomic updates prevent human mistakes in manual version management
 
 ### Release Workflow Integration
 
 When integrated with automated release workflows, versioneer ensures:
-- ✅ **Atomic operations**: Version bumps and git tags created together
-- ✅ **Validation gates**: Pre-push hooks prevent inconsistent versions
-- ✅ **Quality enforcement**: Tests, lints, audits run before every release
+- ✅ **Atomic operations**: All version files updated together or none at all
+- ✅ **Validation gates**: Pre-bump verification prevents inconsistent versions
+- ✅ **Quality enforcement**: Integration with CI/CD quality gates
 - ✅ **Binary verification**: Built binaries report expected versions
-- ✅ **Rollback safety**: Failed releases don't leave repository in inconsistent state
+- ✅ **Rollback safety**: Failed bumps don't leave repository in inconsistent state
 
 ## Supported File Formats
 

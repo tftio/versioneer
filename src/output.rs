@@ -87,20 +87,6 @@ impl OutputFormatter {
             "✗".to_string()
         }
     }
-
-    /// Format a git tag creation message
-    #[must_use]
-    pub fn git_tag(&self, tag_name: &str) -> String {
-        if self.is_tty {
-            format!(
-                "{} Created git tag: {}",
-                Emoji("🏷️", ""),
-                style(tag_name).magenta().bold()
-            )
-        } else {
-            format!("Created git tag: {tag_name}")
-        }
-    }
 }
 
 impl Default for OutputFormatter {
@@ -137,15 +123,6 @@ mod tests {
         assert_eq!(
             formatter_no_tty.build_systems_header(),
             "Detected build systems:"
-        );
-    }
-
-    #[test]
-    fn test_git_tag() {
-        let formatter_no_tty = OutputFormatter { is_tty: false };
-        assert_eq!(
-            formatter_no_tty.git_tag("v1.0.0"),
-            "Created git tag: v1.0.0"
         );
     }
 
@@ -228,7 +205,6 @@ mod tests {
         assert!(formatter_no_tty.error("test").starts_with('✗'));
         assert!(formatter_no_tty.warning("test").starts_with('!'));
         assert!(!formatter_no_tty.build_systems_header().contains("🔍"));
-        assert!(!formatter_no_tty.git_tag("v1.0.0").contains("🏷️"));
     }
 
     #[test]
@@ -253,7 +229,6 @@ mod tests {
             assert!(!formatter.build_systems_header().is_empty());
             assert!(!formatter.sync_status(true).is_empty());
             assert!(!formatter.sync_status(false).is_empty());
-            assert!(!formatter.git_tag("v1.0.0").is_empty());
         }
     }
 }

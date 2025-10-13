@@ -25,32 +25,11 @@ enum Commands {
     /// Show license information
     License,
     /// Bump the major version (x.y.z -> (x+1).0.0)
-    Major {
-        /// Create a git tag after bumping version
-        #[arg(short, long)]
-        tag: bool,
-        /// Custom tag format (default: v{version})
-        #[arg(long)]
-        tag_format: Option<String>,
-    },
+    Major,
     /// Bump the minor version (x.y.z -> x.(y+1).0)
-    Minor {
-        /// Create a git tag after bumping version
-        #[arg(short, long)]
-        tag: bool,
-        /// Custom tag format (default: v{version})
-        #[arg(long)]
-        tag_format: Option<String>,
-    },
+    Minor,
     /// Bump the patch version (x.y.z -> x.y.(z+1))
-    Patch {
-        /// Create a git tag after bumping version
-        #[arg(short, long)]
-        tag: bool,
-        /// Custom tag format (default: v{version})
-        #[arg(long)]
-        tag_format: Option<String>,
-    },
+    Patch,
     /// Show the current version
     Show,
     /// Synchronize all version files to match the VERSION file
@@ -59,22 +38,10 @@ enum Commands {
     Status,
     /// Verify that all version files are synchronized
     Verify,
-    /// Create a git tag for the current version
-    Tag {
-        /// Custom tag format (default: v{version})
-        #[arg(long)]
-        tag_format: Option<String>,
-    },
     /// Reset the version to a specific version or 0.0.0
     Reset {
         /// The version to reset to (default: 0.0.0)
         version: Option<String>,
-        /// Create a git tag after resetting version
-        #[arg(short, long)]
-        tag: bool,
-        /// Custom tag format (default: v{version})
-        #[arg(long)]
-        tag_format: Option<String>,
     },
     /// Generate shell completion scripts
     Completions {
@@ -147,7 +114,7 @@ fn main() -> Result<()> {
                     workhelix_cli_common::license::display_license("versioneer", LicenseType::MIT)
                 );
             }
-            Commands::Major { tag, tag_format } => {
+            Commands::Major => {
                 manager
                     .bump_version(BumpType::Major)
                     .context("Failed to bump major version")?;
@@ -156,12 +123,8 @@ fn main() -> Result<()> {
                     "{}",
                     formatter.success(&format!("Bumped to version {new_version}"))
                 );
-
-                if tag {
-                    handle_git_tagging(&manager, &formatter, tag_format.as_deref());
-                }
             }
-            Commands::Minor { tag, tag_format } => {
+            Commands::Minor => {
                 manager
                     .bump_version(BumpType::Minor)
                     .context("Failed to bump minor version")?;
@@ -170,12 +133,8 @@ fn main() -> Result<()> {
                     "{}",
                     formatter.success(&format!("Bumped to version {new_version}"))
                 );
-
-                if tag {
-                    handle_git_tagging(&manager, &formatter, tag_format.as_deref());
-                }
             }
-            Commands::Patch { tag, tag_format } => {
+            Commands::Patch => {
                 manager
                     .bump_version(BumpType::Patch)
                     .context("Failed to bump patch version")?;
@@ -184,10 +143,6 @@ fn main() -> Result<()> {
                     "{}",
                     formatter.success(&format!("Bumped to version {new_version}"))
                 );
-
-                if tag {
-                    handle_git_tagging(&manager, &formatter, tag_format.as_deref());
-                }
             }
             Commands::Show => {
                 let version = manager
@@ -246,14 +201,7 @@ fn main() -> Result<()> {
                     std::process::exit(1);
                 }
             },
-            Commands::Tag { tag_format } => {
-                handle_git_tagging(&manager, &formatter, tag_format.as_deref());
-            }
-            Commands::Reset {
-                version,
-                tag,
-                tag_format,
-            } => {
+            Commands::Reset { version } => {
                 let target_version = version.as_deref().unwrap_or("0.0.0");
 
                 match manager.reset_version(target_version) {
@@ -262,10 +210,6 @@ fn main() -> Result<()> {
                             "{}",
                             formatter.success(&format!("Version reset to {target_version}"))
                         );
-
-                        if tag {
-                            handle_git_tagging(&manager, &formatter, tag_format.as_deref());
-                        }
                     }
                     Err(e) => {
                         eprintln!(
@@ -302,31 +246,4 @@ fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-fn handle_git_tagging(
-    manager: &VersionManager,
-    formatter: &OutputFormatter,
-    tag_format: Option<&str>,
-) {
-    if !manager.is_git_repository() {
-        println!(
-            "{}",
-            formatter.warning("Not in a git repository, skipping tag creation")
-        );
-        return;
-    }
-
-    match manager.create_git_tag(tag_format) {
-        Ok(tag_name) => {
-            println!("{}", formatter.git_tag(&tag_name));
-        }
-        Err(e) => {
-            eprintln!(
-                "{}",
-                formatter.error(&format!("Failed to create git tag: {e}"))
-            );
-            std::process::exit(1);
-        }
-    }
 }

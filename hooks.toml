@@ -64,13 +64,6 @@ modifies_repository = false
 execution_type = "other"
 description = "Verify all version files are synchronized"
 
-[hooks.tag-version-check]
-command = ["sh", "-c", "if git describe --exact-match --tags HEAD 2>/dev/null | grep -q '^v'; then TAG_VERSION=$(git describe --exact-match --tags HEAD | sed 's/v//'); CARGO_VERSION=$(versioneer show); if [ \"$TAG_VERSION\" != \"$CARGO_VERSION\" ]; then echo '❌ ERROR: Git tag version ('$TAG_VERSION') does not match Cargo version ('$CARGO_VERSION')'; echo \"Use 'versioneer tag' to create tags that match the current version\"; exit 1; fi; echo '✅ Tag version matches Cargo version: '$TAG_VERSION; fi"]
-include = ["Cargo.toml", "VERSION"]
-modifies_repository = false
-execution_type = "other"
-description = "Verify git tag version matches Cargo.toml version"
-
 # =============================================================================
 # HOOK GROUPS
 # =============================================================================
@@ -81,6 +74,6 @@ execution = "sequential"
 description = "Code quality checks before commit (matches CI format + lint jobs)"
 
 [groups.pre-push]
-includes = ["clippy-check", "test-all", "venv-check", "security-audit", "secret-scan", "version-sync-check", "tag-version-check"]
+includes = ["clippy-check", "test-all", "venv-check", "security-audit", "secret-scan", "version-sync-check"]
 execution = "sequential"
 description = "Full validation before push (matches CI lint + test + audit + security jobs)"
