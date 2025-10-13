@@ -288,7 +288,7 @@ fn main() -> Result<()> {
                 force,
                 install_dir,
             } => {
-                let repo_info = workhelix_cli_common::RepoInfo::new("workhelix", "versioneer", "v");
+                let repo_info = workhelix_cli_common::RepoInfo::new("tftio", "versioneer", "v");
                 let exit_code = workhelix_cli_common::update::run_update(
                     &repo_info,
                     env!("CARGO_PKG_VERSION"),
