@@ -142,7 +142,10 @@ fn main() -> Result<()> {
                 println!("versioneer {}", env!("CARGO_PKG_VERSION"));
             }
             Commands::License => {
-                println!("{}", workhelix_cli_common::license::display_license("versioneer", LicenseType::MIT));
+                println!(
+                    "{}",
+                    workhelix_cli_common::license::display_license("versioneer", LicenseType::MIT)
+                );
             }
             Commands::Major { tag, tag_format } => {
                 manager

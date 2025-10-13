@@ -180,18 +180,12 @@ mod tests {
         let formatter = OutputFormatter { is_tty: false };
 
         // Test with special characters
-        assert_eq!(
-            formatter.success("test with 日本語"),
-            "✓ test with 日本語"
-        );
+        assert_eq!(formatter.success("test with 日本語"), "✓ test with 日本語");
         assert_eq!(
             formatter.error("error: 'quoted' \"values\""),
             "✗ error: 'quoted' \"values\""
         );
-        assert_eq!(
-            formatter.warning("path/to/file.txt"),
-            "! path/to/file.txt"
-        );
+        assert_eq!(formatter.warning("path/to/file.txt"), "! path/to/file.txt");
     }
 
     #[test]

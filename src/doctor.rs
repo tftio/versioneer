@@ -104,13 +104,11 @@ pub fn run_doctor(manager: &VersionManager) -> i32 {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
     use tempfile::TempDir;
-
 
     #[test]
     fn test_run_doctor_returns_zero() {
@@ -247,11 +245,7 @@ mod tests {
     fn test_doctor_with_invalid_package_json() {
         let temp_dir = TempDir::new().unwrap();
         fs::write(temp_dir.path().join("VERSION"), "1.0.0\n").unwrap();
-        fs::write(
-            temp_dir.path().join("package.json"),
-            "invalid json {{{",
-        )
-        .unwrap();
+        fs::write(temp_dir.path().join("package.json"), "invalid json {{{").unwrap();
 
         let manager = VersionManager::new(temp_dir.path());
         let exit_code = run_doctor(&manager);
