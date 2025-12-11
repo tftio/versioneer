@@ -691,11 +691,12 @@ impl VersionManager {
         let pattern = format!(r#"(?s)(\[{section}\][^\[]*?version\s*=\s*")[^"]*(")"#);
         let re = Regex::new(&pattern).context("Failed to create regex for version replacement")?;
 
-        let result = re.replace(content, format!("${{1}}{version}${{2}}"));
-
-        if result == content {
+        // Check if the regex can find a match at all
+        if !re.is_match(content) {
             anyhow::bail!("No version field found in [{section}] section");
         }
+
+        let result = re.replace(content, format!("${{1}}{version}${{2}}"));
 
         Ok(result.to_string())
     }
