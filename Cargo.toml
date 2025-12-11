@@ -1,6 +1,6 @@
 [package]
 name = "versioneer"
-version = "2.1.0"
+version = "3.0.0"
 edition = "2024"
 rust-version = "1.85.0"
 authors = ["Versioneer Contributors"]
@@ -22,6 +22,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 workhelix-cli-common = "0.4.1"
 cargo-edit = "0.13.7"
+ignore = "0.4"
 
 [dev-dependencies]
 tempfile = "3.23"

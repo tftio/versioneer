@@ -32,6 +32,15 @@ pub enum BumpType {
     Patch,
 }
 
+/// Result of a dry-run operation showing what would change
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DryRunResult {
+    /// The new version that would be applied
+    pub new_version: Version,
+    /// List of files that would be updated
+    pub files_to_update: Vec<std::path::PathBuf>,
+}
+
 /// Core version management functionality
 pub struct VersionManager {
     /// The current working directory path
@@ -230,6 +239,314 @@ impl VersionManager {
         }
 
         Ok(())
+    }
+
+    /// Bump version with cascade dry-run (preview what would change)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if discovery fails or version reading fails.
+    pub fn bump_cascade_dry_run(&self, bump_type: BumpType) -> Result<DryRunResult> {
+        // Step 1: Discover all manifests
+        let manifests = self.discover_manifests()?;
+
+        // Step 2: Read current version and calculate new version
+        let current_version = self.read_version_file()?;
+        let new_version = match bump_type {
+            BumpType::Major => Version::new(current_version.major + 1, 0, 0),
+            BumpType::Minor => Version::new(current_version.major, current_version.minor + 1, 0),
+            BumpType::Patch => Version::new(
+                current_version.major,
+                current_version.minor,
+                current_version.patch + 1,
+            ),
+        };
+
+        // Step 3: Collect all files that would be updated
+        let mut files_to_update = vec![self.base_path.join("VERSION")];
+        for (path, _) in manifests {
+            files_to_update.push(path);
+        }
+
+        Ok(DryRunResult {
+            new_version,
+            files_to_update,
+        })
+    }
+
+    /// Bump version with cascade (update all discovered manifests)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if discovery fails, versions are out of sync, or updates fail.
+    /// On error, all changes are rolled back.
+    pub fn bump_cascade(&self, bump_type: BumpType) -> Result<()> {
+        use std::collections::HashMap;
+
+        // Step 1: Discover all manifests
+        let manifests = self.discover_manifests()?;
+
+        // Step 2: Read current version and calculate new version
+        let current_version = self.read_version_file()?;
+        let new_version = match bump_type {
+            BumpType::Major => Version::new(current_version.major + 1, 0, 0),
+            BumpType::Minor => Version::new(current_version.major, current_version.minor + 1, 0),
+            BumpType::Patch => Version::new(
+                current_version.major,
+                current_version.minor,
+                current_version.patch + 1,
+            ),
+        };
+
+        // Step 3: Read all files into memory for potential rollback
+        let mut original_contents: HashMap<std::path::PathBuf, String> = HashMap::new();
+
+        // Read VERSION file
+        let version_path = self.base_path.join("VERSION");
+        original_contents.insert(version_path.clone(), fs::read_to_string(&version_path)?);
+
+        // Read all manifests
+        for (path, _) in &manifests {
+            original_contents.insert(path.clone(), fs::read_to_string(path)?);
+        }
+
+        // Step 4: Perform updates with rollback on error
+        let update_result = (|| -> Result<()> {
+            // Update VERSION file
+            self.write_version_file(&new_version)?;
+
+            // Update all manifests
+            for (path, system) in &manifests {
+                // Create a temporary VersionManager for this manifest's directory
+                let manifest_dir = path.parent().context("Manifest has no parent directory")?;
+                let temp_manager = VersionManager::new(manifest_dir);
+                temp_manager
+                    .update_build_system_version(system, &new_version)
+                    .with_context(|| {
+                        format!("Failed to update {:?} at {}", system, path.display())
+                    })?;
+            }
+
+            Ok(())
+        })();
+
+        // Step 5: Rollback on error
+        if let Err(e) = update_result {
+            // Restore all original contents
+            for (path, content) in original_contents {
+                let _ = fs::write(&path, content); // Best effort rollback
+            }
+            return Err(e);
+        }
+
+        Ok(())
+    }
+
+    /// Preview sync operation with cascade (dry-run mode)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if discovery or version reading fails.
+    pub fn sync_cascade_dry_run(&self) -> Result<DryRunResult> {
+        // Step 1: Discover all manifests
+        let manifests = self.discover_manifests()?;
+
+        // Step 2: Read current version
+        let version = self.read_version_file()?;
+
+        // Step 3: Collect all files that would be updated
+        let mut files_to_update = Vec::new();
+        for (path, _) in manifests {
+            files_to_update.push(path);
+        }
+
+        Ok(DryRunResult {
+            new_version: version,
+            files_to_update,
+        })
+    }
+
+    /// Sync all manifests with cascade (update all to match VERSION file)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if discovery fails or updates fail.
+    /// On error, all changes are rolled back.
+    pub fn sync_cascade(&self) -> Result<()> {
+        use std::collections::HashMap;
+
+        // Step 1: Discover all manifests
+        let manifests = self.discover_manifests()?;
+
+        // Step 2: Read current version
+        let version = self.read_version_file()?;
+
+        // Step 3: Read all manifest files into memory for potential rollback
+        let mut original_contents: HashMap<std::path::PathBuf, String> = HashMap::new();
+
+        for (path, _) in &manifests {
+            original_contents.insert(path.clone(), fs::read_to_string(path)?);
+        }
+
+        // Step 4: Perform updates with rollback on error
+        let update_result = (|| -> Result<()> {
+            for (path, system) in &manifests {
+                let manifest_dir = path.parent().context("Manifest has no parent directory")?;
+                let temp_manager = VersionManager::new(manifest_dir);
+                temp_manager
+                    .update_build_system_version(system, &version)
+                    .with_context(|| {
+                        format!("Failed to sync {:?} at {}", system, path.display())
+                    })?;
+            }
+            Ok(())
+        })();
+
+        // Step 5: Rollback on error
+        if let Err(e) = update_result {
+            for (path, content) in original_contents {
+                let _ = fs::write(&path, content);
+            }
+            return Err(e);
+        }
+
+        Ok(())
+    }
+
+    /// Preview reset operation with cascade (dry-run mode)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if discovery fails or version is invalid.
+    pub fn reset_cascade_dry_run(&self, version_str: &str) -> Result<DryRunResult> {
+        // Step 1: Parse and validate version
+        let new_version = Version::parse(version_str)
+            .with_context(|| format!("Invalid semantic version format: '{version_str}'"))?;
+
+        // Step 2: Discover all manifests
+        let manifests = self.discover_manifests()?;
+
+        // Step 3: Collect all files that would be updated
+        let mut files_to_update = vec![self.base_path.join("VERSION")];
+        for (path, _) in manifests {
+            files_to_update.push(path);
+        }
+
+        Ok(DryRunResult {
+            new_version,
+            files_to_update,
+        })
+    }
+
+    /// Reset version with cascade (reset all discovered manifests)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if discovery fails, version is invalid, or updates fail.
+    /// On error, all changes are rolled back.
+    pub fn reset_cascade(&self, version_str: &str) -> Result<()> {
+        use std::collections::HashMap;
+
+        // Step 1: Parse and validate version
+        let new_version = Version::parse(version_str)
+            .with_context(|| format!("Invalid semantic version format: '{version_str}'"))?;
+
+        // Step 2: Discover all manifests
+        let manifests = self.discover_manifests()?;
+
+        // Step 3: Read all files into memory for potential rollback
+        let mut original_contents: HashMap<std::path::PathBuf, String> = HashMap::new();
+
+        let version_path = self.base_path.join("VERSION");
+        original_contents.insert(version_path.clone(), fs::read_to_string(&version_path)?);
+
+        for (path, _) in &manifests {
+            original_contents.insert(path.clone(), fs::read_to_string(path)?);
+        }
+
+        // Step 4: Perform updates with rollback on error
+        let update_result = (|| -> Result<()> {
+            self.write_version_file(&new_version)?;
+
+            for (path, system) in &manifests {
+                let manifest_dir = path.parent().context("Manifest has no parent directory")?;
+                let temp_manager = VersionManager::new(manifest_dir);
+                temp_manager
+                    .update_build_system_version(system, &new_version)
+                    .with_context(|| {
+                        format!("Failed to reset {:?} at {}", system, path.display())
+                    })?;
+            }
+            Ok(())
+        })();
+
+        // Step 5: Rollback on error
+        if let Err(e) = update_result {
+            for (path, content) in original_contents {
+                let _ = fs::write(&path, content);
+            }
+            return Err(e);
+        }
+
+        Ok(())
+    }
+
+    /// Discover all manifest files recursively in subdirectories
+    ///
+    /// Respects .gitignore patterns. Errors if nested VERSION files are found.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if directory traversal fails or nested VERSION files are found.
+    pub fn discover_manifests(&self) -> Result<Vec<(std::path::PathBuf, BuildSystem)>> {
+        use ignore::WalkBuilder;
+
+        let mut manifests = Vec::new();
+
+        // Use ignore crate to respect .gitignore
+        let walker = WalkBuilder::new(&self.base_path)
+            .hidden(false)
+            .git_ignore(true)
+            .build();
+
+        for entry in walker {
+            let entry = entry?;
+            let path = entry.path();
+
+            // Check for symlinks (error condition)
+            let metadata = fs::symlink_metadata(path)?;
+            if metadata.is_symlink() {
+                anyhow::bail!(
+                    "Symlink found at {}. Symlinks are not supported in cascade mode.",
+                    path.display()
+                );
+            }
+
+            if path.is_file() {
+                if let Some(filename) = path.file_name() {
+                    let filename_str = filename.to_string_lossy();
+
+                    // Check for nested VERSION files
+                    if filename_str == "VERSION" {
+                        // VERSION file in base_path is OK, but not in subdirectories
+                        if path.parent() != Some(&self.base_path) {
+                            anyhow::bail!(
+                                "Nested VERSION file found at {}. Only one VERSION file is allowed at the root directory.",
+                                path.display()
+                            );
+                        }
+                    } else if filename_str == "Cargo.toml" {
+                        manifests.push((path.to_path_buf(), BuildSystem::Cargo));
+                    } else if filename_str == "pyproject.toml" {
+                        manifests.push((path.to_path_buf(), BuildSystem::PyProject));
+                    } else if filename_str == "package.json" {
+                        manifests.push((path.to_path_buf(), BuildSystem::PackageJson));
+                    }
+                }
+            }
+        }
+
+        Ok(manifests)
     }
 
     /// Read version from Cargo.toml
@@ -1061,6 +1378,259 @@ version = "1.2.3"
         let version = manager.read_cargo_version()?;
 
         assert_eq!(version, Version::new(1, 2, 3));
+        Ok(())
+    }
+
+    #[test]
+    fn test_discover_manifests_in_subdirectories() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+
+        // Create subdirectories with manifest files
+        fs::create_dir(temp_dir.path().join("rust-tool"))?;
+        fs::write(
+            temp_dir.path().join("rust-tool/Cargo.toml"),
+            "[package]\nname = \"rust-tool\"\nversion = \"1.0.0\"\n",
+        )?;
+
+        fs::create_dir(temp_dir.path().join("python-client"))?;
+        fs::write(
+            temp_dir.path().join("python-client/pyproject.toml"),
+            "[project]\nname = \"python-client\"\nversion = \"1.0.0\"\n",
+        )?;
+
+        fs::create_dir(temp_dir.path().join("js-sdk"))?;
+        fs::write(
+            temp_dir.path().join("js-sdk/package.json"),
+            r#"{"name": "js-sdk", "version": "1.0.0"}"#,
+        )?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let manifests = manager.discover_manifests()?;
+
+        // Should find all three manifest files
+        assert_eq!(manifests.len(), 3);
+
+        // Verify each type is found
+        let cargo_found = manifests.iter().any(|(_, sys)| *sys == BuildSystem::Cargo);
+        let pyproject_found = manifests
+            .iter()
+            .any(|(_, sys)| *sys == BuildSystem::PyProject);
+        let packagejson_found = manifests
+            .iter()
+            .any(|(_, sys)| *sys == BuildSystem::PackageJson);
+
+        assert!(cargo_found, "Should find Cargo.toml");
+        assert!(pyproject_found, "Should find pyproject.toml");
+        assert!(packagejson_found, "Should find package.json");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_discover_manifests_respects_gitignore() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+
+        // Initialize git repo (required for ignore crate to respect .gitignore)
+        fs::create_dir(temp_dir.path().join(".git"))?;
+
+        // Create .gitignore
+        fs::write(
+            temp_dir.path().join(".gitignore"),
+            "target/\nnode_modules/\n.venv/\n",
+        )?;
+
+        // Create manifests in ignored directories
+        fs::create_dir(temp_dir.path().join("target"))?;
+        fs::write(
+            temp_dir.path().join("target/Cargo.toml"),
+            "[package]\nname = \"ignored\"\nversion = \"1.0.0\"\n",
+        )?;
+
+        fs::create_dir(temp_dir.path().join("node_modules"))?;
+        fs::write(
+            temp_dir.path().join("node_modules/package.json"),
+            r#"{"name": "ignored", "version": "1.0.0"}"#,
+        )?;
+
+        // Create manifests in non-ignored directory
+        fs::create_dir(temp_dir.path().join("src"))?;
+        fs::write(
+            temp_dir.path().join("src/Cargo.toml"),
+            "[package]\nname = \"not-ignored\"\nversion = \"1.0.0\"\n",
+        )?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let manifests = manager.discover_manifests()?;
+
+        // Should only find the non-ignored manifest
+        assert_eq!(
+            manifests.len(),
+            1,
+            "Should only find 1 manifest (not in ignored dirs)"
+        );
+
+        let found_path = &manifests[0].0;
+        assert!(
+            found_path.ends_with("src/Cargo.toml"),
+            "Should find src/Cargo.toml, got: {}",
+            found_path.display()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_discover_manifests_rejects_nested_version_files() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+
+        // Create top-level VERSION
+        fs::write(temp_dir.path().join("VERSION"), "1.0.0")?;
+
+        // Create nested VERSION file (should be error)
+        fs::create_dir(temp_dir.path().join("subproject"))?;
+        fs::write(temp_dir.path().join("subproject/VERSION"), "2.0.0")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let result = manager.discover_manifests();
+
+        assert!(result.is_err(), "Should error on nested VERSION file");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("VERSION") || err_msg.contains("nested"),
+            "Error should mention nested VERSION file, got: {}",
+            err_msg
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_discover_manifests_rejects_symlinks() -> Result<()> {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = TempDir::new()?;
+
+        // Create a real directory with manifest
+        fs::create_dir(temp_dir.path().join("real-dir"))?;
+        fs::write(
+            temp_dir.path().join("real-dir/Cargo.toml"),
+            "[package]\nname = \"real\"\nversion = \"1.0.0\"\n",
+        )?;
+
+        // Create a symlink to the directory
+        let symlink_path = temp_dir.path().join("link-dir");
+        symlink(temp_dir.path().join("real-dir"), &symlink_path)?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let result = manager.discover_manifests();
+
+        assert!(result.is_err(), "Should error on symlink");
+        let err_msg = result.unwrap_err().to_string().to_lowercase();
+        assert!(
+            err_msg.contains("symlink") || err_msg.contains("symbolic"),
+            "Error should mention symlink, got: {}",
+            err_msg
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_bump_cascade_updates_all_manifests() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+
+        // Create top-level VERSION
+        fs::write(temp_dir.path().join("VERSION"), "1.0.0")?;
+
+        // Create subdirectories with different manifest types
+        fs::create_dir(temp_dir.path().join("rust-tool"))?;
+        fs::write(
+            temp_dir.path().join("rust-tool/Cargo.toml"),
+            "[package]\nname = \"rust-tool\"\nversion = \"1.0.0\"\n",
+        )?;
+
+        fs::create_dir(temp_dir.path().join("python-client"))?;
+        fs::write(
+            temp_dir.path().join("python-client/pyproject.toml"),
+            "[project]\nname = \"python-client\"\nversion = \"1.0.0\"\n",
+        )?;
+
+        fs::create_dir(temp_dir.path().join("js-sdk"))?;
+        fs::write(
+            temp_dir.path().join("js-sdk/package.json"),
+            r#"{"name": "js-sdk", "version": "1.0.0"}"#,
+        )?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        manager.bump_cascade(BumpType::Minor)?;
+
+        // Verify VERSION was bumped
+        let version = manager.read_version_file()?;
+        assert_eq!(version, Version::new(1, 1, 0));
+
+        // Verify all manifests were updated
+        let cargo_content = fs::read_to_string(temp_dir.path().join("rust-tool/Cargo.toml"))?;
+        assert!(cargo_content.contains("version = \"1.1.0\""));
+
+        let pyproject_content =
+            fs::read_to_string(temp_dir.path().join("python-client/pyproject.toml"))?;
+        assert!(pyproject_content.contains("version = \"1.1.0\""));
+
+        let package_content = fs::read_to_string(temp_dir.path().join("js-sdk/package.json"))?;
+        assert!(package_content.contains("\"version\": \"1.1.0\""));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_bump_cascade_dry_run_does_not_write_files() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+
+        // Create top-level VERSION
+        fs::write(temp_dir.path().join("VERSION"), "1.0.0")?;
+
+        // Create subdirectories with different manifest types
+        fs::create_dir(temp_dir.path().join("rust-tool"))?;
+        fs::write(
+            temp_dir.path().join("rust-tool/Cargo.toml"),
+            "[package]\nname = \"rust-tool\"\nversion = \"1.0.0\"\n",
+        )?;
+
+        fs::create_dir(temp_dir.path().join("python-client"))?;
+        fs::write(
+            temp_dir.path().join("python-client/pyproject.toml"),
+            "[project]\nname = \"python-client\"\nversion = \"1.0.0\"\n",
+        )?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let changes = manager.bump_cascade_dry_run(BumpType::Patch)?;
+
+        // Should return preview of changes
+        assert_eq!(changes.new_version, Version::new(1, 0, 1));
+        assert_eq!(changes.files_to_update.len(), 3); // VERSION + Cargo.toml + pyproject.toml
+
+        // Verify files were NOT changed
+        let version = manager.read_version_file()?;
+        assert_eq!(
+            version,
+            Version::new(1, 0, 0),
+            "VERSION should not change in dry-run"
+        );
+
+        let cargo_content = fs::read_to_string(temp_dir.path().join("rust-tool/Cargo.toml"))?;
+        assert!(
+            cargo_content.contains("version = \"1.0.0\""),
+            "Cargo.toml should not change in dry-run"
+        );
+
+        let pyproject_content =
+            fs::read_to_string(temp_dir.path().join("python-client/pyproject.toml"))?;
+        assert!(
+            pyproject_content.contains("version = \"1.0.0\""),
+            "pyproject.toml should not change in dry-run"
+        );
+
         Ok(())
     }
 }

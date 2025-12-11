@@ -3,7 +3,6 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::env;
-use std::path::PathBuf;
 use versioneer::{BumpType, VersionManager, output::OutputFormatter};
 use workhelix_cli_common::LicenseType;
 
@@ -25,15 +24,55 @@ enum Commands {
     /// Show license information
     License,
     /// Bump the major version (x.y.z -> (x+1).0.0)
-    Major,
+    Major {
+        /// Update all manifests in subdirectories recursively
+        #[arg(long)]
+        cascade: bool,
+        /// Preview changes without writing files (requires --cascade)
+        #[arg(long)]
+        dry_run: bool,
+        /// Suppress output (only show errors)
+        #[arg(long, short)]
+        quiet: bool,
+    },
     /// Bump the minor version (x.y.z -> x.(y+1).0)
-    Minor,
+    Minor {
+        /// Update all manifests in subdirectories recursively
+        #[arg(long)]
+        cascade: bool,
+        /// Preview changes without writing files (requires --cascade)
+        #[arg(long)]
+        dry_run: bool,
+        /// Suppress output (only show errors)
+        #[arg(long, short)]
+        quiet: bool,
+    },
     /// Bump the patch version (x.y.z -> x.y.(z+1))
-    Patch,
+    Patch {
+        /// Update all manifests in subdirectories recursively
+        #[arg(long)]
+        cascade: bool,
+        /// Preview changes without writing files (requires --cascade)
+        #[arg(long)]
+        dry_run: bool,
+        /// Suppress output (only show errors)
+        #[arg(long, short)]
+        quiet: bool,
+    },
     /// Show the current version
     Show,
     /// Synchronize all version files to match the VERSION file
-    Sync,
+    Sync {
+        /// Update all manifests in subdirectories recursively
+        #[arg(long)]
+        cascade: bool,
+        /// Preview changes without writing files (requires --cascade)
+        #[arg(long)]
+        dry_run: bool,
+        /// Suppress output (only show errors)
+        #[arg(long, short)]
+        quiet: bool,
+    },
     /// Show which build systems are detected
     Status,
     /// Verify that all version files are synchronized
@@ -42,6 +81,15 @@ enum Commands {
     Reset {
         /// The version to reset to (default: 0.0.0)
         version: Option<String>,
+        /// Update all manifests in subdirectories recursively
+        #[arg(long)]
+        cascade: bool,
+        /// Preview changes without writing files (requires --cascade)
+        #[arg(long)]
+        dry_run: bool,
+        /// Suppress output (only show errors)
+        #[arg(long, short)]
+        quiet: bool,
     },
     /// Generate shell completion scripts
     Completions {
@@ -50,17 +98,6 @@ enum Commands {
     },
     /// Check health and configuration
     Doctor,
-    /// Update to latest version
-    Update {
-        /// Specific version to install
-        version: Option<String>,
-        /// Force update even if already up-to-date
-        #[arg(short, long)]
-        force: bool,
-        /// Custom installation directory
-        #[arg(long)]
-        install_dir: Option<PathBuf>,
-    },
 }
 
 #[allow(clippy::too_many_lines)]
@@ -114,35 +151,152 @@ fn main() -> Result<()> {
                     workhelix_cli_common::license::display_license("versioneer", LicenseType::MIT)
                 );
             }
-            Commands::Major => {
-                manager
-                    .bump_version(BumpType::Major)
-                    .context("Failed to bump major version")?;
-                let new_version = manager.read_version_file()?;
-                println!(
-                    "{}",
-                    formatter.success(&format!("Bumped to version {new_version}"))
-                );
+            Commands::Major {
+                cascade,
+                dry_run,
+                quiet,
+            } => {
+                if dry_run && !cascade {
+                    eprintln!("{}", formatter.error("--dry-run requires --cascade"));
+                    std::process::exit(1);
+                }
+
+                if dry_run {
+                    let changes = manager
+                        .bump_cascade_dry_run(BumpType::Major)
+                        .context("Failed to preview major version bump")?;
+                    if !quiet {
+                        println!(
+                            "{}",
+                            formatter
+                                .success(&format!("Would bump to version {}", changes.new_version))
+                        );
+                        println!("\nFiles to update:");
+                        for file in &changes.files_to_update {
+                            println!("  {}", file.display());
+                        }
+                    }
+                } else if cascade {
+                    manager
+                        .bump_cascade(BumpType::Major)
+                        .context("Failed to bump major version")?;
+                    if !quiet {
+                        let new_version = manager.read_version_file()?;
+                        println!(
+                            "{}",
+                            formatter.success(&format!("Bumped to version {new_version}"))
+                        );
+                    }
+                } else {
+                    manager
+                        .bump_version(BumpType::Major)
+                        .context("Failed to bump major version")?;
+                    if !quiet {
+                        let new_version = manager.read_version_file()?;
+                        println!(
+                            "{}",
+                            formatter.success(&format!("Bumped to version {new_version}"))
+                        );
+                    }
+                }
             }
-            Commands::Minor => {
-                manager
-                    .bump_version(BumpType::Minor)
-                    .context("Failed to bump minor version")?;
-                let new_version = manager.read_version_file()?;
-                println!(
-                    "{}",
-                    formatter.success(&format!("Bumped to version {new_version}"))
-                );
+            Commands::Minor {
+                cascade,
+                dry_run,
+                quiet,
+            } => {
+                if dry_run && !cascade {
+                    eprintln!("{}", formatter.error("--dry-run requires --cascade"));
+                    std::process::exit(1);
+                }
+
+                if dry_run {
+                    let changes = manager
+                        .bump_cascade_dry_run(BumpType::Minor)
+                        .context("Failed to preview minor version bump")?;
+                    if !quiet {
+                        println!(
+                            "{}",
+                            formatter
+                                .success(&format!("Would bump to version {}", changes.new_version))
+                        );
+                        println!("\nFiles to update:");
+                        for file in &changes.files_to_update {
+                            println!("  {}", file.display());
+                        }
+                    }
+                } else if cascade {
+                    manager
+                        .bump_cascade(BumpType::Minor)
+                        .context("Failed to bump minor version")?;
+                    if !quiet {
+                        let new_version = manager.read_version_file()?;
+                        println!(
+                            "{}",
+                            formatter.success(&format!("Bumped to version {new_version}"))
+                        );
+                    }
+                } else {
+                    manager
+                        .bump_version(BumpType::Minor)
+                        .context("Failed to bump minor version")?;
+                    if !quiet {
+                        let new_version = manager.read_version_file()?;
+                        println!(
+                            "{}",
+                            formatter.success(&format!("Bumped to version {new_version}"))
+                        );
+                    }
+                }
             }
-            Commands::Patch => {
-                manager
-                    .bump_version(BumpType::Patch)
-                    .context("Failed to bump patch version")?;
-                let new_version = manager.read_version_file()?;
-                println!(
-                    "{}",
-                    formatter.success(&format!("Bumped to version {new_version}"))
-                );
+            Commands::Patch {
+                cascade,
+                dry_run,
+                quiet,
+            } => {
+                if dry_run && !cascade {
+                    eprintln!("{}", formatter.error("--dry-run requires --cascade"));
+                    std::process::exit(1);
+                }
+
+                if dry_run {
+                    let changes = manager
+                        .bump_cascade_dry_run(BumpType::Patch)
+                        .context("Failed to preview patch version bump")?;
+                    if !quiet {
+                        println!(
+                            "{}",
+                            formatter
+                                .success(&format!("Would bump to version {}", changes.new_version))
+                        );
+                        println!("\nFiles to update:");
+                        for file in &changes.files_to_update {
+                            println!("  {}", file.display());
+                        }
+                    }
+                } else if cascade {
+                    manager
+                        .bump_cascade(BumpType::Patch)
+                        .context("Failed to bump patch version")?;
+                    if !quiet {
+                        let new_version = manager.read_version_file()?;
+                        println!(
+                            "{}",
+                            formatter.success(&format!("Bumped to version {new_version}"))
+                        );
+                    }
+                } else {
+                    manager
+                        .bump_version(BumpType::Patch)
+                        .context("Failed to bump patch version")?;
+                    if !quiet {
+                        let new_version = manager.read_version_file()?;
+                        println!(
+                            "{}",
+                            formatter.success(&format!("Bumped to version {new_version}"))
+                        );
+                    }
+                }
             }
             Commands::Show => {
                 let version = manager
@@ -150,15 +304,56 @@ fn main() -> Result<()> {
                     .context("Failed to read VERSION file")?;
                 println!("{version}");
             }
-            Commands::Sync => {
-                manager
-                    .sync_versions()
-                    .context("Failed to synchronize versions")?;
-                let version = manager.read_version_file()?;
-                println!(
-                    "{}",
-                    formatter.success(&format!("Synchronized all files to version {version}"))
-                );
+            Commands::Sync {
+                cascade,
+                dry_run,
+                quiet,
+            } => {
+                if dry_run && !cascade {
+                    eprintln!("{}", formatter.error("--dry-run requires --cascade"));
+                    std::process::exit(1);
+                }
+
+                if dry_run {
+                    let changes = manager
+                        .sync_cascade_dry_run()
+                        .context("Failed to preview synchronization")?;
+                    if !quiet {
+                        println!(
+                            "{}",
+                            formatter
+                                .success(&format!("Would sync to version {}", changes.new_version))
+                        );
+                        println!("\nFiles to update:");
+                        for file in &changes.files_to_update {
+                            println!("  {}", file.display());
+                        }
+                    }
+                } else if cascade {
+                    manager
+                        .sync_cascade()
+                        .context("Failed to synchronize versions")?;
+                    if !quiet {
+                        let version = manager.read_version_file()?;
+                        println!(
+                            "{}",
+                            formatter
+                                .success(&format!("Synchronized all files to version {version}"))
+                        );
+                    }
+                } else {
+                    manager
+                        .sync_versions()
+                        .context("Failed to synchronize versions")?;
+                    if !quiet {
+                        let version = manager.read_version_file()?;
+                        println!(
+                            "{}",
+                            formatter
+                                .success(&format!("Synchronized all files to version {version}"))
+                        );
+                    }
+                }
             }
             Commands::Status => {
                 let version = manager
@@ -201,22 +396,68 @@ fn main() -> Result<()> {
                     std::process::exit(1);
                 }
             },
-            Commands::Reset { version } => {
+            Commands::Reset {
+                version,
+                cascade,
+                dry_run,
+                quiet,
+            } => {
+                if dry_run && !cascade {
+                    eprintln!("{}", formatter.error("--dry-run requires --cascade"));
+                    std::process::exit(1);
+                }
+
                 let target_version = version.as_deref().unwrap_or("0.0.0");
 
-                match manager.reset_version(target_version) {
-                    Ok(()) => {
-                        println!(
-                            "{}",
-                            formatter.success(&format!("Version reset to {target_version}"))
-                        );
+                if dry_run {
+                    match manager.reset_cascade_dry_run(target_version) {
+                        Ok(changes) => {
+                            if !quiet {
+                                println!(
+                                    "{}",
+                                    formatter.success(&format!(
+                                        "Would reset to version {}",
+                                        changes.new_version
+                                    ))
+                                );
+                                println!("\nFiles to update:");
+                                for file in &changes.files_to_update {
+                                    println!("  {}", file.display());
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "{}",
+                                formatter.error(&format!("Failed to preview reset: {e}"))
+                            );
+                            std::process::exit(1);
+                        }
                     }
-                    Err(e) => {
-                        eprintln!(
-                            "{}",
-                            formatter.error(&format!("Failed to reset version: {e}"))
-                        );
-                        std::process::exit(1);
+                } else {
+                    let result = if cascade {
+                        manager.reset_cascade(target_version)
+                    } else {
+                        manager.reset_version(target_version)
+                    };
+
+                    match result {
+                        Ok(()) => {
+                            if !quiet {
+                                println!(
+                                    "{}",
+                                    formatter
+                                        .success(&format!("Version reset to {target_version}"))
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "{}",
+                                formatter.error(&format!("Failed to reset version: {e}"))
+                            );
+                            std::process::exit(1);
+                        }
                     }
                 }
             }
@@ -225,21 +466,6 @@ fn main() -> Result<()> {
             }
             Commands::Doctor => {
                 let exit_code = doctor::run_doctor(&manager);
-                std::process::exit(exit_code);
-            }
-            Commands::Update {
-                version,
-                force,
-                install_dir,
-            } => {
-                let repo_info = workhelix_cli_common::RepoInfo::new("tftio", "versioneer", "v");
-                let exit_code = workhelix_cli_common::update::run_update(
-                    &repo_info,
-                    env!("CARGO_PKG_VERSION"),
-                    version.as_deref(),
-                    force,
-                    install_dir.as_deref(),
-                );
                 std::process::exit(exit_code);
             }
         },

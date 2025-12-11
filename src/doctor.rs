@@ -1,7 +1,6 @@
 //! Health check and diagnostics module.
 
 use versioneer::VersionManager;
-use workhelix_cli_common::RepoInfo;
 
 /// Run doctor command to check health and configuration.
 ///
@@ -12,7 +11,6 @@ pub fn run_doctor(manager: &VersionManager) -> i32 {
     println!();
 
     let mut has_errors = false;
-    let mut has_warnings = false;
 
     // Check VERSION file
     println!("Version Files:");
@@ -67,37 +65,10 @@ pub fn run_doctor(manager: &VersionManager) -> i32 {
 
     println!();
 
-    // Check for updates
-    println!("Updates:");
-    let repo_info = RepoInfo::new("tftio", "versioneer", "v");
-    match workhelix_cli_common::doctor::check_for_updates(&repo_info, env!("CARGO_PKG_VERSION")) {
-        Ok(Some(latest)) => {
-            let current = env!("CARGO_PKG_VERSION");
-            println!("  ⚠️  Update available: v{latest} (current: v{current})");
-            println!("  💡 Run 'versioneer update' to install the latest version");
-            has_warnings = true;
-        }
-        Ok(None) => {
-            println!(
-                "  ✅ Running latest version (v{})",
-                env!("CARGO_PKG_VERSION")
-            );
-        }
-        Err(e) => {
-            println!("  ⚠️  Failed to check for updates: {e}");
-            has_warnings = true;
-        }
-    }
-
-    println!();
-
     // Summary
     if has_errors {
         println!("❌ Issues found - see above for details");
         1
-    } else if has_warnings {
-        println!("⚠️  1 warning found");
-        0 // Warnings don't cause failure
     } else {
         println!("✨ Everything looks healthy!");
         0
