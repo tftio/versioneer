@@ -319,7 +319,7 @@ impl VersionManager {
             for (path, system) in &manifests {
                 // Create a temporary VersionManager for this manifest's directory
                 let manifest_dir = path.parent().context("Manifest has no parent directory")?;
-                let temp_manager = VersionManager::new(manifest_dir);
+                let temp_manager = Self::new(manifest_dir);
                 temp_manager
                     .update_build_system_version(system, &new_version)
                     .with_context(|| {
@@ -392,7 +392,7 @@ impl VersionManager {
         let update_result = (|| -> Result<()> {
             for (path, system) in &manifests {
                 let manifest_dir = path.parent().context("Manifest has no parent directory")?;
-                let temp_manager = VersionManager::new(manifest_dir);
+                let temp_manager = Self::new(manifest_dir);
                 temp_manager
                     .update_build_system_version(system, &version)
                     .with_context(|| {
@@ -470,7 +470,7 @@ impl VersionManager {
 
             for (path, system) in &manifests {
                 let manifest_dir = path.parent().context("Manifest has no parent directory")?;
-                let temp_manager = VersionManager::new(manifest_dir);
+                let temp_manager = Self::new(manifest_dir);
                 temp_manager
                     .update_build_system_version(system, &new_version)
                     .with_context(|| {
@@ -1497,8 +1497,7 @@ version = "1.2.3"
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("VERSION") || err_msg.contains("nested"),
-            "Error should mention nested VERSION file, got: {}",
-            err_msg
+            "Error should mention nested VERSION file, got: {err_msg}"
         );
 
         Ok(())
@@ -1529,8 +1528,7 @@ version = "1.2.3"
         let err_msg = result.unwrap_err().to_string().to_lowercase();
         assert!(
             err_msg.contains("symlink") || err_msg.contains("symbolic"),
-            "Error should mention symlink, got: {}",
-            err_msg
+            "Error should mention symlink, got: {err_msg}"
         );
 
         Ok(())

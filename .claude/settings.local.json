@@ -37,7 +37,8 @@
       "Bash(/Users/jfb/.local/share/cargo/bin/cargo build)",
       "Bash(/Users/jfb/Projects/rust/versioneer/target/debug/versioneer patch:*)",
       "Bash(echo:*)",
-      "Bash(/Users/jfb/Projects/rust/versioneer/target/debug/versioneer:*)"
+      "Bash(/Users/jfb/Projects/rust/versioneer/target/debug/versioneer:*)",
+      "Bash(/Users/jfb/.local/share/cargo/bin/cargo clippy --all-targets -- -D warnings)"
     ],
     "deny": [],
     "ask": [],
