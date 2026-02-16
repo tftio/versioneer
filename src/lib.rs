@@ -549,6 +549,68 @@ impl VersionManager {
         Ok(manifests)
     }
 
+    /// Count existing RC tags for a given base version.
+    ///
+    /// Queries git for tags matching `v{major}.{minor}.{patch}-rc.*`
+    /// and returns the highest RC number found, or 0 if none exist.
+    fn count_rc_tags(&self, base_version: &Version) -> Result<u64> {
+        let pattern = format!(
+            "v{}.{}.{}-rc.*",
+            base_version.major, base_version.minor, base_version.patch
+        );
+
+        let output = std::process::Command::new("git")
+            .args(["tag", "-l", &pattern])
+            .current_dir(&self.base_path)
+            .output()
+            .context("Failed to run git. Is git installed and is this a git repository?")?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("git tag failed: {stderr}");
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut max_rc: u64 = 0;
+
+        for line in stdout.lines() {
+            let line = line.trim();
+            if let Some(rc_part) = line.rsplit("-rc.").next() {
+                if let Ok(n) = rc_part.parse::<u64>() {
+                    max_rc = max_rc.max(n);
+                }
+            }
+        }
+
+        Ok(max_rc)
+    }
+
+    /// Compute the next RC version from the VERSION file and git tags.
+    ///
+    /// Reads VERSION (must be a clean M.m.p without pre-release suffix),
+    /// counts existing RC tags, and returns the next RC version.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the VERSION file cannot be read, contains a pre-release
+    /// suffix, or if git tag querying fails.
+    pub fn next_rc_version(&self) -> Result<Version> {
+        let base_version = self.read_version_file()?;
+
+        if !base_version.pre.is_empty() {
+            anyhow::bail!(
+                "VERSION must be a clean M.m.p version without pre-release suffix, got: {base_version}"
+            );
+        }
+
+        let max_rc = self.count_rc_tags(&base_version)?;
+        let mut rc_version = base_version;
+        rc_version.pre = semver::Prerelease::new(&format!("rc.{}", max_rc + 1))
+            .context("Failed to construct pre-release version")?;
+
+        Ok(rc_version)
+    }
+
     /// Read version from Cargo.toml
     fn read_cargo_version(&self) -> Result<Version> {
         let cargo_path = self.base_path.join("Cargo.toml");
@@ -1579,6 +1641,153 @@ version = "1.2.3"
         let package_content = fs::read_to_string(temp_dir.path().join("js-sdk/package.json"))?;
         assert!(package_content.contains("\"version\": \"1.1.0\""));
 
+        Ok(())
+    }
+
+    // Helper to initialize a git repo in a temp directory with an initial commit
+    fn init_git_repo(dir: &Path) -> Result<()> {
+        use std::process::Command;
+        let run = |args: &[&str]| -> Result<()> {
+            let output = Command::new("git").args(args).current_dir(dir).output()?;
+            if !output.status.success() {
+                anyhow::bail!(
+                    "git {:?} failed: {}",
+                    args,
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            Ok(())
+        };
+
+        run(&["init"])?;
+        run(&["config", "user.email", "test@test.com"])?;
+        run(&["config", "user.name", "Test"])?;
+        run(&["commit", "--allow-empty", "-m", "init"])?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_count_rc_tags_no_git() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("VERSION"), "1.0.0")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let version = Version::new(1, 0, 0);
+        let result = manager.count_rc_tags(&version);
+
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_count_rc_tags_no_tags() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        init_git_repo(temp_dir.path())?;
+        fs::write(temp_dir.path().join("VERSION"), "1.0.0")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let version = Version::new(1, 0, 0);
+        let count = manager.count_rc_tags(&version)?;
+
+        assert_eq!(count, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn test_count_rc_tags_with_existing() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        init_git_repo(temp_dir.path())?;
+
+        // Create RC tags
+        std::process::Command::new("git")
+            .args(["tag", "v1.0.0-rc.1"])
+            .current_dir(temp_dir.path())
+            .output()?;
+        std::process::Command::new("git")
+            .args(["tag", "v1.0.0-rc.2"])
+            .current_dir(temp_dir.path())
+            .output()?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let version = Version::new(1, 0, 0);
+        let count = manager.count_rc_tags(&version)?;
+
+        assert_eq!(count, 2);
+        Ok(())
+    }
+
+    #[test]
+    fn test_count_rc_tags_ignores_other_versions() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        init_git_repo(temp_dir.path())?;
+
+        std::process::Command::new("git")
+            .args(["tag", "v2.0.0-rc.1"])
+            .current_dir(temp_dir.path())
+            .output()?;
+        std::process::Command::new("git")
+            .args(["tag", "v1.0.0-rc.1"])
+            .current_dir(temp_dir.path())
+            .output()?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let version = Version::new(1, 0, 0);
+        let count = manager.count_rc_tags(&version)?;
+
+        assert_eq!(count, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn test_next_rc_version_first() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        init_git_repo(temp_dir.path())?;
+        fs::write(temp_dir.path().join("VERSION"), "1.0.0")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let rc = manager.next_rc_version()?;
+
+        assert_eq!(rc.to_string(), "1.0.0-rc.1");
+        Ok(())
+    }
+
+    #[test]
+    fn test_next_rc_version_increment() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        init_git_repo(temp_dir.path())?;
+        fs::write(temp_dir.path().join("VERSION"), "1.0.0")?;
+
+        std::process::Command::new("git")
+            .args(["tag", "v1.0.0-rc.1"])
+            .current_dir(temp_dir.path())
+            .output()?;
+        std::process::Command::new("git")
+            .args(["tag", "v1.0.0-rc.2"])
+            .current_dir(temp_dir.path())
+            .output()?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let rc = manager.next_rc_version()?;
+
+        assert_eq!(rc.to_string(), "1.0.0-rc.3");
+        Ok(())
+    }
+
+    #[test]
+    fn test_next_rc_version_rejects_prerelease() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        init_git_repo(temp_dir.path())?;
+        fs::write(temp_dir.path().join("VERSION"), "1.0.0-beta.1")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let result = manager.next_rc_version();
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("clean M.m.p"),
+            "Error should mention clean version requirement, got: {err_msg}"
+        );
         Ok(())
     }
 

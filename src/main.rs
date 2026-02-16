@@ -91,6 +91,8 @@ enum Commands {
         #[arg(long, short)]
         quiet: bool,
     },
+    /// Compute the next release candidate version from VERSION + git tags
+    Rc,
     /// Generate shell completion scripts
     Completions {
         /// Shell to generate completions for
@@ -460,6 +462,12 @@ fn main() -> Result<()> {
                         }
                     }
                 }
+            }
+            Commands::Rc => {
+                let rc_version = manager
+                    .next_rc_version()
+                    .context("Failed to compute RC version")?;
+                println!("{rc_version}");
             }
             Commands::Completions { shell } => {
                 workhelix_cli_common::completions::generate_completions::<Cli>(shell);
