@@ -41,17 +41,31 @@ pub struct DryRunResult {
     pub files_to_update: Vec<std::path::PathBuf>,
 }
 
+/// Default version filename
+pub const DEFAULT_VERSION_FILE: &str = "VERSION";
+
 /// Core version management functionality
 pub struct VersionManager {
     /// The current working directory path
     pub base_path: std::path::PathBuf,
+    /// The version filename (e.g. "VERSION" or "version.txt")
+    pub version_file: String,
 }
 
 impl VersionManager {
-    /// Create a new `VersionManager` for the given directory
+    /// Create a new `VersionManager` for the given directory with the default version filename
     pub fn new<P: AsRef<Path>>(base_path: P) -> Self {
         Self {
             base_path: base_path.as_ref().to_path_buf(),
+            version_file: DEFAULT_VERSION_FILE.to_string(),
+        }
+    }
+
+    /// Create a new `VersionManager` with a custom version filename
+    pub fn with_version_file<P: AsRef<Path>>(base_path: P, version_file: &str) -> Self {
+        Self {
+            base_path: base_path.as_ref().to_path_buf(),
+            version_file: version_file.to_string(),
         }
     }
 
@@ -61,12 +75,13 @@ impl VersionManager {
     ///
     /// Returns an error if the VERSION file cannot be read or contains an invalid version format.
     pub fn read_version_file(&self) -> Result<Version> {
-        let version_path = self.base_path.join("VERSION");
+        let version_path = self.base_path.join(&self.version_file);
         let content = fs::read_to_string(&version_path).with_context(|| {
             format!("Failed to read VERSION file at {}", version_path.display())
         })?;
 
-        let version_str = content.trim();
+        // Strip inline comments (e.g. "1.2.3 # x-release-please-version")
+        let version_str = content.trim().split('#').next().unwrap_or("").trim();
         Version::parse(version_str)
             .with_context(|| format!("Invalid version format in VERSION file: {version_str}"))
     }
@@ -77,8 +92,24 @@ impl VersionManager {
     ///
     /// Returns an error if the VERSION file cannot be written to.
     pub fn write_version_file(&self, version: &Version) -> Result<()> {
-        let version_path = self.base_path.join("VERSION");
-        fs::write(&version_path, version.to_string())
+        let version_path = self.base_path.join(&self.version_file);
+
+        // Preserve inline comments (e.g. "# x-release-please-version")
+        let content = if version_path.exists() {
+            let existing = fs::read_to_string(&version_path).unwrap_or_default();
+            let trimmed = existing.trim();
+            trimmed.find('#').map_or_else(
+                || format!("{version}\n"),
+                |hash_pos| {
+                    let comment = trimmed[hash_pos..].trim();
+                    format!("{version} {comment}\n")
+                },
+            )
+        } else {
+            format!("{version}\n")
+        };
+
+        fs::write(&version_path, content)
             .with_context(|| format!("Failed to write VERSION file at {}", version_path.display()))
     }
 
@@ -263,7 +294,7 @@ impl VersionManager {
         };
 
         // Step 3: Collect all files that would be updated
-        let mut files_to_update = vec![self.base_path.join("VERSION")];
+        let mut files_to_update = vec![self.base_path.join(&self.version_file)];
         for (path, _) in manifests {
             files_to_update.push(path);
         }
@@ -301,8 +332,8 @@ impl VersionManager {
         // Step 3: Read all files into memory for potential rollback
         let mut original_contents: HashMap<std::path::PathBuf, String> = HashMap::new();
 
-        // Read VERSION file
-        let version_path = self.base_path.join("VERSION");
+        // Read version file
+        let version_path = self.base_path.join(&self.version_file);
         original_contents.insert(version_path.clone(), fs::read_to_string(&version_path)?);
 
         // Read all manifests
@@ -427,7 +458,7 @@ impl VersionManager {
         let manifests = self.discover_manifests()?;
 
         // Step 3: Collect all files that would be updated
-        let mut files_to_update = vec![self.base_path.join("VERSION")];
+        let mut files_to_update = vec![self.base_path.join(&self.version_file)];
         for (path, _) in manifests {
             files_to_update.push(path);
         }
@@ -457,7 +488,7 @@ impl VersionManager {
         // Step 3: Read all files into memory for potential rollback
         let mut original_contents: HashMap<std::path::PathBuf, String> = HashMap::new();
 
-        let version_path = self.base_path.join("VERSION");
+        let version_path = self.base_path.join(&self.version_file);
         original_contents.insert(version_path.clone(), fs::read_to_string(&version_path)?);
 
         for (path, _) in &manifests {
@@ -526,13 +557,15 @@ impl VersionManager {
                 if let Some(filename) = path.file_name() {
                     let filename_str = filename.to_string_lossy();
 
-                    // Check for nested VERSION files
-                    if filename_str == "VERSION" {
-                        // VERSION file in base_path is OK, but not in subdirectories
+                    // Check for nested version files
+                    if filename_str == self.version_file {
+                        // Version file in base_path is OK, but not in subdirectories
                         if path.parent() != Some(&self.base_path) {
                             anyhow::bail!(
-                                "Nested VERSION file found at {}. Only one VERSION file is allowed at the root directory.",
-                                path.display()
+                                "Nested {} file found at {}. Only one {} file is allowed at the root directory.",
+                                self.version_file,
+                                path.display(),
+                                self.version_file,
                             );
                         }
                     } else if filename_str == "Cargo.toml" {
@@ -1789,6 +1822,228 @@ version = "1.2.3"
             "Error should mention clean version requirement, got: {err_msg}"
         );
         Ok(())
+    }
+
+    #[test]
+    fn test_read_version_file_with_inline_comment() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(
+            temp_dir.path().join("VERSION"),
+            "1.2.3 # x-release-please-version\n",
+        )?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let version = manager.read_version_file()?;
+
+        assert_eq!(version, Version::new(1, 2, 3));
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_version_file_with_comment_no_space() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("VERSION"), "2.0.0#some-comment\n")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        let version = manager.read_version_file()?;
+
+        assert_eq!(version, Version::new(2, 0, 0));
+        Ok(())
+    }
+
+    #[test]
+    fn test_write_version_file_preserves_comment() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(
+            temp_dir.path().join("VERSION"),
+            "1.0.0 # x-release-please-version\n",
+        )?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        manager.write_version_file(&Version::new(2, 3, 4))?;
+
+        let content = fs::read_to_string(temp_dir.path().join("VERSION"))?;
+        assert_eq!(content, "2.3.4 # x-release-please-version\n");
+        Ok(())
+    }
+
+    #[test]
+    fn test_write_version_file_no_comment() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("VERSION"), "1.0.0\n")?;
+
+        let manager = VersionManager::new(temp_dir.path());
+        manager.write_version_file(&Version::new(3, 0, 0))?;
+
+        let content = fs::read_to_string(temp_dir.path().join("VERSION"))?;
+        assert_eq!(content, "3.0.0\n");
+        Ok(())
+    }
+
+    #[test]
+    fn test_write_version_file_new_file() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        // No VERSION file exists
+
+        let manager = VersionManager::new(temp_dir.path());
+        manager.write_version_file(&Version::new(1, 0, 0))?;
+
+        let content = fs::read_to_string(temp_dir.path().join("VERSION"))?;
+        assert_eq!(content, "1.0.0\n");
+        Ok(())
+    }
+
+    #[test]
+    fn test_bump_roundtrip_with_comment() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(
+            temp_dir.path().join("VERSION"),
+            "1.0.0 # x-release-please-version\n",
+        )?;
+
+        let manager = VersionManager::new(temp_dir.path());
+
+        // Read should strip comment
+        let version = manager.read_version_file()?;
+        assert_eq!(version, Version::new(1, 0, 0));
+
+        // Write should preserve comment
+        let bumped = Version::new(1, 1, 0);
+        manager.write_version_file(&bumped)?;
+
+        let content = fs::read_to_string(temp_dir.path().join("VERSION"))?;
+        assert_eq!(content, "1.1.0 # x-release-please-version\n");
+
+        // Read again should work
+        let version = manager.read_version_file()?;
+        assert_eq!(version, Version::new(1, 1, 0));
+        Ok(())
+    }
+
+    #[test]
+    fn test_with_version_file_reads_custom_filename() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("version.txt"), "3.2.1\n")?;
+
+        let manager = VersionManager::with_version_file(temp_dir.path(), "version.txt");
+        let version = manager.read_version_file()?;
+
+        assert_eq!(version, Version::new(3, 2, 1));
+        Ok(())
+    }
+
+    #[test]
+    fn test_with_version_file_writes_custom_filename() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("version.txt"), "1.0.0\n")?;
+
+        let manager = VersionManager::with_version_file(temp_dir.path(), "version.txt");
+        manager.write_version_file(&Version::new(2, 0, 0))?;
+
+        let content = fs::read_to_string(temp_dir.path().join("version.txt"))?;
+        assert_eq!(content, "2.0.0\n");
+
+        // Ensure no "VERSION" file was created
+        assert!(!temp_dir.path().join("VERSION").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn test_with_version_file_bump_syncs_all() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("version.txt"), "1.0.0\n")?;
+        fs::write(
+            temp_dir.path().join("Cargo.toml"),
+            "[package]\nname = \"test\"\nversion = \"1.0.0\"\n",
+        )?;
+        fs::write(
+            temp_dir.path().join("pyproject.toml"),
+            "[project]\nname = \"test\"\nversion = \"1.0.0\"\n",
+        )?;
+
+        let manager = VersionManager::with_version_file(temp_dir.path(), "version.txt");
+        manager.bump_version(BumpType::Minor)?;
+
+        assert_eq!(manager.read_version_file()?, Version::new(1, 1, 0));
+        assert_eq!(manager.read_cargo_version()?, Version::new(1, 1, 0));
+        assert_eq!(manager.read_pyproject_version()?, Version::new(1, 1, 0));
+        Ok(())
+    }
+
+    #[test]
+    fn test_with_version_file_sync() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("version.txt"), "5.0.0\n")?;
+        fs::write(
+            temp_dir.path().join("Cargo.toml"),
+            "[package]\nname = \"test\"\nversion = \"1.0.0\"\n",
+        )?;
+
+        let manager = VersionManager::with_version_file(temp_dir.path(), "version.txt");
+        manager.sync_versions()?;
+
+        assert_eq!(manager.read_cargo_version()?, Version::new(5, 0, 0));
+        Ok(())
+    }
+
+    #[test]
+    fn test_with_version_file_verify_in_sync() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("version.txt"), "2.0.0\n")?;
+        fs::write(
+            temp_dir.path().join("Cargo.toml"),
+            "[package]\nname = \"test\"\nversion = \"2.0.0\"\n",
+        )?;
+
+        let manager = VersionManager::with_version_file(temp_dir.path(), "version.txt");
+        assert!(manager.verify_versions_in_sync().is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn test_with_version_file_verify_out_of_sync() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(temp_dir.path().join("version.txt"), "2.0.0\n")?;
+        fs::write(
+            temp_dir.path().join("Cargo.toml"),
+            "[package]\nname = \"test\"\nversion = \"1.0.0\"\n",
+        )?;
+
+        let manager = VersionManager::with_version_file(temp_dir.path(), "version.txt");
+        assert!(manager.verify_versions_in_sync().is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_with_version_file_comment_preservation() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(
+            temp_dir.path().join("version.txt"),
+            "1.0.0 # x-release-please-version\n",
+        )?;
+
+        let manager = VersionManager::with_version_file(temp_dir.path(), "version.txt");
+
+        // Read strips comment
+        let version = manager.read_version_file()?;
+        assert_eq!(version, Version::new(1, 0, 0));
+
+        // Write preserves comment
+        manager.write_version_file(&Version::new(2, 0, 0))?;
+        let content = fs::read_to_string(temp_dir.path().join("version.txt"))?;
+        assert_eq!(content, "2.0.0 # x-release-please-version\n");
+        Ok(())
+    }
+
+    #[test]
+    fn test_default_version_file_constant() {
+        assert_eq!(DEFAULT_VERSION_FILE, "VERSION");
+    }
+
+    #[test]
+    fn test_new_uses_default_filename() {
+        let manager = VersionManager::new("/tmp");
+        assert_eq!(manager.version_file, "VERSION");
     }
 
     #[test]

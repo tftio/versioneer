@@ -3,7 +3,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::env;
-use versioneer::{BumpType, VersionManager, output::OutputFormatter};
+use versioneer::{BumpType, DEFAULT_VERSION_FILE, VersionManager, output::OutputFormatter};
 use workhelix_cli_common::LicenseType;
 
 mod doctor;
@@ -13,6 +13,10 @@ mod doctor;
 #[command(about = "A tool to synchronize VERSION files with build system version declarations")]
 #[command(version)]
 struct Cli {
+    /// Version filename to use (default: VERSION)
+    #[arg(long, global = true, default_value = DEFAULT_VERSION_FILE)]
+    version_file: String,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -108,7 +112,7 @@ fn main() -> Result<()> {
 
     let current_dir = env::current_dir().context("Failed to get current directory")?;
     let formatter = OutputFormatter::new();
-    let manager = VersionManager::new(current_dir);
+    let manager = VersionManager::with_version_file(current_dir, &cli.version_file);
 
     match cli.command {
         None => {

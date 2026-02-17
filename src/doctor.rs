@@ -12,14 +12,14 @@ pub fn run_doctor(manager: &VersionManager) -> i32 {
 
     let mut has_errors = false;
 
-    // Check VERSION file
+    // Check version file
     println!("Version Files:");
     match manager.read_version_file() {
         Ok(version) => {
-            println!("  ✅ VERSION file: {version}");
+            println!("  ✅ {} file: {version}", manager.version_file);
         }
         Err(e) => {
-            println!("  ❌ VERSION file error: {e}");
+            println!("  ❌ {} file error: {e}", manager.version_file);
             has_errors = true;
         }
     }
